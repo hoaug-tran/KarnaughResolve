@@ -8,6 +8,20 @@ interface CircuitViewerProps {
   subtitle?: string
 }
 
+function formatSubscript(str: string): string {
+  return str
+    .replace(/_0/g, '₀')
+    .replace(/_1/g, '₁')
+    .replace(/_2/g, '₂')
+    .replace(/_3/g, '₃')
+    .replace(/_4/g, '₄')
+    .replace(/_5/g, '₅')
+    .replace(/_6/g, '₆')
+    .replace(/_7/g, '₇')
+    .replace(/_8/g, '₈')
+    .replace(/_9/g, '₉')
+}
+
 export const CircuitViewer: React.FC<CircuitViewerProps> = ({ diagram, title, subtitle }) => {
   const svgRef = useRef<SVGSVGElement | null>(null)
   const [scale, setScale] = useState<number>(1)
@@ -78,11 +92,12 @@ export const CircuitViewer: React.FC<CircuitViewerProps> = ({ diagram, title, su
   }
 
   const renderGateLabel = (label: string) => {
-    const chars = Array.from(label)
+    const formatted = formatSubscript(label)
+    const chars = Array.from(formatted)
     const elements: { char: string; inverted: boolean }[] = []
     for (let i = 0; i < chars.length; i++) {
       const c = chars[i]
-      if (c === '̄' || c === '\u0304') {
+      if (c === '\u0304') {
         if (elements.length > 0) {
           elements[elements.length - 1].inverted = true
         }
@@ -200,7 +215,7 @@ export const CircuitViewer: React.FC<CircuitViewerProps> = ({ diagram, title, su
           <g transform={`translate(${node.x}, ${node.y})`}>
             <circle cx="0" cy="0" r="15" className="output-pin-bg" />
             <text x="0" y="5" className="output-pin-text">
-              {node.label}
+              {node.label ? formatSubscript(node.label) : ''}
             </text>
           </g>
         )

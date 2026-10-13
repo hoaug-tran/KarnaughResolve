@@ -407,10 +407,30 @@ export function solveKMap(
   const primes = findPrimeImplicants(count, grid, form)
   const chosenRects = selectCover(targetCells, primes)
 
-  chosenRects.sort((a, b) => b.cells.length - a.cells.length || a.cells[0] - b.cells[0])
-
-  const groups: KMapGroup[] = chosenRects.map((rect, idx) => {
+  const derivedPrimes = chosenRects.map((rect) => {
     const derived = deriveTerm(count, rect.cells, form)
+    return { rect, derived }
+  })
+
+  derivedPrimes.sort((a, b) => {
+    const litsA = a.derived.literals
+    const litsB = b.derived.literals
+
+    for (let i = 0; i < Math.min(litsA.length, litsB.length); i++) {
+      const cmp = litsA[i].variable.localeCompare(litsB[i].variable)
+      if (cmp !== 0) return cmp
+      if (litsA[i].inverted !== litsB[i].inverted) {
+        return litsA[i].inverted ? 1 : -1
+      }
+    }
+    if (litsA.length !== litsB.length) {
+      return litsA.length - litsB.length
+    }
+    return b.rect.cells.length - a.rect.cells.length || a.rect.cells[0] - b.rect.cells[0]
+  })
+
+  const groups: KMapGroup[] = derivedPrimes.map((item, idx) => {
+    const { rect, derived } = item
     const label = form === 'SOP' ? `N_${idx + 1}` : `V_${idx + 1}`
     return {
       id: `group-${idx}`,

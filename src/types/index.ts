@@ -82,3 +82,28 @@ export interface SolverResult {
   circuitTarget: CircuitDiagram
   targetGateType: TargetGateType
 }
+
+export type ExamProblemType = 'cau_1' | 'cau_2'
+
+export type CombinationalSubtype = 'single_rule' | 'code_converter' | 'seven_segment'
+
+export type SingleRuleIgnoreMode = 'remaining_are_unused' | 'none' | 'bcd_10_15' | 'custom'
+
+export type LedPolarity = 'cathode_common' | 'anode_common'
+
+export interface CombinationalRow {
+  id: string
+  decimal: number
+  inputBits: number[]
+  outputBits: (number | 'X')[]
+  displayChar?: string
+  isUnused?: boolean
+}
+
+export interface CombinationalOutputResult {
+  name: string
+  groups: KMapGroup[]
+  simplifiedLatex: string
+  simplifiedPlain: string
+  gridValues: Record<number, CellValue>
+}
