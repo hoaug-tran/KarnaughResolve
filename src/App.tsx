@@ -37,7 +37,7 @@ export const App: React.FC = () => {
   const [currentProblem, setCurrentProblem] = useState<ExamProblemType>('cau_1')
 
   const [variableCount, setVariableCount] = useState<VariableCount>(4)
-  const [form, setForm] = useState<OptimizationForm>('SOP')
+  const [form, setForm] = useState<OptimizationForm>('POS')
   const [targetGateType, setTargetGateType] = useState<TargetGateType>('nand_2')
   const [activeTab, setActiveTab] = useState<string>('report')
   const [hoveredGroup, setHoveredGroup] = useState<string | null>(null)
@@ -46,11 +46,11 @@ export const App: React.FC = () => {
 
   const [gridValues, setGridValues] = useState<Record<number, CellValue>>(() => {
     const initial: Record<number, CellValue> = {}
-    for (let i = 0; i < 16; i++) initial[i] = 0
-    const sampleMinterms = [1, 2, 4, 5, 9, 10, 12]
-    const sampleDc = [0, 13, 14]
-    sampleMinterms.forEach((m) => { initial[m] = 1 })
-    sampleDc.forEach((d) => { initial[d] = 'd' })
+    for (let i = 0; i < 16; i++) initial[i] = 1
+    const c1Zeros = [0, 2, 3, 9, 11, 13, 15]
+    const c1Dc = [4, 10, 14]
+    c1Zeros.forEach((m) => { initial[m] = 0 })
+    c1Dc.forEach((d) => { initial[d] = 'd' })
     return initial
   })
 

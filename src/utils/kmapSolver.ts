@@ -241,59 +241,107 @@ function findPrimeImplicants(
   return primeImplicants
 }
 
+function pruneRedundant(groups: RectGroup[], targetCells: number[]): RectGroup[] {
+  const result = [...groups]
+  result.sort((a, b) => a.cells.length - b.cells.length)
+
+  for (let i = result.length - 1; i >= 0; i--) {
+    const otherCells = new Set<number>()
+    for (let j = 0; j < result.length; j++) {
+      if (i === j) continue
+      for (const c of result[j].cells) {
+        otherCells.add(c)
+      }
+    }
+    const allCovered = targetCells.every((c) => otherCells.has(c))
+    if (allCovered) {
+      result.splice(i, 1)
+    }
+  }
+  return result
+}
+
 function selectCover(
   targetCells: number[],
   primeImplicants: RectGroup[]
 ): RectGroup[] {
   if (targetCells.length === 0) return []
+  const targetSet = new Set(targetCells)
+  const validPrimes = primeImplicants.filter((p) => p.cells.some((c) => targetSet.has(c)))
 
-  const uncovered = new Set(targetCells)
-  const chosen: RectGroup[] = []
+  const essential: RectGroup[] = []
+  const remainingTargets = new Set(targetCells)
 
-  let foundEssential = true
-  while (foundEssential && uncovered.size > 0) {
-    foundEssential = false
-    for (const cell of Array.from(uncovered)) {
-      const covering = primeImplicants.filter((p) => p.cells.includes(cell) && !chosen.includes(p))
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const cell of Array.from(remainingTargets)) {
+      const covering = validPrimes.filter((p) => p.cells.includes(cell))
       if (covering.length === 1) {
-        const essential = covering[0]
-        chosen.push(essential)
-        for (const c of essential.cells) {
-          uncovered.delete(c)
+        const prime = covering[0]
+        if (!essential.includes(prime)) {
+          essential.push(prime)
+          for (const c of prime.cells) {
+            remainingTargets.delete(c)
+          }
+          changed = true
+          break
         }
-        foundEssential = true
-        break
       }
     }
   }
 
-  while (uncovered.size > 0) {
-    let bestGroup: RectGroup | null = null
-    let maxCoverCount = -1
+  if (remainingTargets.size === 0) {
+    return pruneRedundant(essential, targetCells)
+  }
 
-    for (const group of primeImplicants) {
-      if (chosen.includes(group)) continue
-      let count = 0
-      for (const c of group.cells) {
-        if (uncovered.has(c)) count++
+  const remainingPrimes = validPrimes.filter(
+    (p) => !essential.includes(p) && p.cells.some((c) => remainingTargets.has(c))
+  )
+  remainingPrimes.sort((a, b) => b.cells.length - a.cells.length)
+
+  let bestCover: RectGroup[] | null = null
+
+  function search(currentCover: RectGroup[], uncovered: Set<number>) {
+    if (uncovered.size === 0) {
+      if (!bestCover || currentCover.length < bestCover.length) {
+        bestCover = [...currentCover]
+      } else if (currentCover.length === bestCover.length) {
+        const curSize = currentCover.reduce((sum, g) => sum + g.cells.length, 0)
+        const bestSize = bestCover.reduce((sum, g) => sum + g.cells.length, 0)
+        if (curSize > bestSize) {
+          bestCover = [...currentCover]
+        }
       }
-      if (count > maxCoverCount) {
-        maxCoverCount = count
-        bestGroup = group
-      } else if (count === maxCoverCount && bestGroup && group.cells.length > bestGroup.cells.length) {
-        bestGroup = group
+      return
+    }
+
+    if (bestCover && currentCover.length >= bestCover.length) return
+
+    let minCandidates: RectGroup[] | null = null
+
+    for (const cell of uncovered) {
+      const candidates = remainingPrimes.filter(
+        (p) => p.cells.includes(cell) && !currentCover.includes(p)
+      )
+      if (!minCandidates || candidates.length < minCandidates.length) {
+        minCandidates = candidates
       }
     }
 
-    if (!bestGroup || maxCoverCount <= 0) break
+    if (!minCandidates || minCandidates.length === 0) return
 
-    chosen.push(bestGroup)
-    for (const c of bestGroup.cells) {
-      uncovered.delete(c)
+    for (const cand of minCandidates) {
+      const nextUncovered = new Set(uncovered)
+      for (const c of cand.cells) {
+        nextUncovered.delete(c)
+      }
+      search([...currentCover, cand], nextUncovered)
     }
   }
 
-  return chosen
+  search(essential, remainingTargets)
+  return pruneRedundant(bestCover || essential, targetCells)
 }
 
 function deriveTerm(

@@ -4,6 +4,7 @@ import { KMapGrid } from './KMapGrid'
 import { CircuitViewer } from './CircuitViewer'
 import { ProofViewer } from './ProofViewer'
 import { KaTeXView } from './KaTeXView'
+import { CheckCircle2, Info } from 'lucide-react'
 
 interface ExamReportViewProps {
   variableCount: VariableCount
@@ -71,6 +72,19 @@ export const ExamReportView: React.FC<ExamReportViewProps> = ({
 
           <div className="exam-groups-pane">
             <h4 className="exam-subtitle">2. Phân tích các nhóm khoanh tối ưu:</h4>
+            <div className="exam-summary-badge">
+              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+              <span>
+                Khoanh tối ưu: <strong>{groups.length} vòng</strong> (
+                {[
+                  groups.filter((g) => g.cells.length === 8).length > 0 && `${groups.filter((g) => g.cells.length === 8).length} vòng 8 ô`,
+                  groups.filter((g) => g.cells.length === 4).length > 0 && `${groups.filter((g) => g.cells.length === 4).length} vòng 4 ô`,
+                  groups.filter((g) => g.cells.length === 2).length > 0 && `${groups.filter((g) => g.cells.length === 2).length} vòng 2 ô`,
+                  groups.filter((g) => g.cells.length === 1).length > 0 && `${groups.filter((g) => g.cells.length === 1).length} vòng 1 ô`
+                ].filter(Boolean).join(', ')}
+                ) — Không có vòng thừa
+              </span>
+            </div>
             <div className="exam-groups-list">
               {groups.map((g, idx) => (
                 <div
@@ -85,6 +99,7 @@ export const ExamReportView: React.FC<ExamReportViewProps> = ({
                   <div className="exam-group-content">
                     <div className="exam-group-formula">
                       <KaTeXView math={`Y_{${idx + 1}} = ${g.label}(${g.cells.join(', ')}) = ${g.termLatex}`} />
+                      <span className="exam-group-size-tag">Vòng {g.cells.length} ô</span>
                     </div>
                     {g.eliminatedVariables.length > 0 && (
                       <div className="exam-group-note">
@@ -102,6 +117,13 @@ export const ExamReportView: React.FC<ExamReportViewProps> = ({
               </div>
               <div className="result-formula">
                 <KaTeXView math={`Y_{(${variables.join(', ')})} = ${simplifiedLatex}`} block={true} />
+              </div>
+            </div>
+
+            <div className="exam-rule-hint-box">
+              <Info className="w-4 h-4 text-primary shrink-0" />
+              <div className="exam-rule-hint-text">
+                <strong>Quy tắc khoanh tối giản UNETI:</strong> Mỗi vòng khoanh phải phủ nhiều ô nhất có thể (kích thước luỹ thừa 2: 8, 4, 2, 1) và mọi ô mục tiêu phải được phủ bằng số vòng ít nhất. Tuyệt đối không khoanh các vòng phụ mà tất cả các ô trong đó đã được các vòng khác phủ trọn (vòng thừa).
               </div>
             </div>
           </div>

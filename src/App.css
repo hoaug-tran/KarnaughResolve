@@ -2502,3 +2502,49 @@ html.dark .row-unused {
   min-width: fit-content;
 }
 
+.exam-summary-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 0.8125rem;
+  color: var(--text-primary);
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-left: 3px solid #10b981;
+  border-radius: var(--radius-sm);
+  margin-bottom: 12px;
+}
+
+.exam-group-size-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  border-radius: 9999px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  margin-left: 8px;
+}
+
+.exam-rule-hint-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  font-size: 0.78125rem;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  margin-top: 14px;
+}
+
+.exam-rule-hint-text {
+  flex: 1;
+}
+
+
