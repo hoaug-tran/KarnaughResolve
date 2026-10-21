@@ -10,7 +10,7 @@ interface ProofViewerProps {
 }
 
 export const ProofViewer: React.FC<ProofViewerProps> = ({ steps, funcName = 'Y' }) => {
-  const [isOpen, setIsOpen] = useState<boolean>(false)
+  const [isOpen, setIsOpen] = useState<boolean>(true)
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null)
 
   const copyStepLatex = (latex: string, idx: number) => {
@@ -20,9 +20,6 @@ export const ProofViewer: React.FC<ProofViewerProps> = ({ steps, funcName = 'Y' 
   }
 
   const finalStep = steps[steps.length - 1]
-  const cascadeStep = steps.find(
-    (s) => (s.latex.includes('S_{12}') || s.latex.includes('P_{12}')) && s !== finalStep
-  )
 
   return (
     <div className="proof-viewer-card">
@@ -32,10 +29,10 @@ export const ProofViewer: React.FC<ProofViewerProps> = ({ steps, funcName = 'Y' 
           <div className="summary-math">
             <KaTeXView math={finalStep ? finalStep.latex : `${funcName} = 0`} />
           </div>
-          {cascadeStep && (
+          {finalStep?.intermediateSignal && (
             <div className="summary-cascade-sub">
               <span className="summary-cascade-label">Hệ tín hiệu phân tầng:</span>
-              <KaTeXView math={cascadeStep.latex} />
+              <KaTeXView math={finalStep.intermediateSignal} />
             </div>
           )}
         </div>
@@ -53,9 +50,9 @@ export const ProofViewer: React.FC<ProofViewerProps> = ({ steps, funcName = 'Y' 
       {isOpen && (
         <div className="steps-detail-container">
           <div className="steps-laws-card">
-            <div className="flex items-center gap-2 mb-2">
-              <HelpCircle className="w-4 h-4 text-blue-600" />
-              <span className="font-semibold text-xs text-slate-700 dark:text-slate-300">
+            <div className="laws-header">
+              <HelpCircle className="laws-header-icon" />
+              <span className="laws-header-title">
                 Các định luật và công thức Boolean áp dụng trong bài
               </span>
             </div>

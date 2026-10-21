@@ -1,5 +1,11 @@
 import React, { useState } from 'react'
-import type { CombinationalRow, CombinationalSubtype, LedPolarity, SingleRuleIgnoreMode } from '../types'
+import type {
+  CombinationalOptStrategy,
+  CombinationalRow,
+  CombinationalSubtype,
+  LedPolarity,
+  SingleRuleIgnoreMode
+} from '../types'
 import {
   COMMON_7SEG_PRESETS,
   DIGIT_CHARS,
@@ -24,6 +30,12 @@ interface CombinationalInputPanelProps {
   onSevenSegCharsChange: (chars: string) => void
   selectedOutputs: string[]
   onSelectedOutputsChange: (outs: string[]) => void
+  optStrategy: CombinationalOptStrategy
+  onOptStrategyChange: (strategy: CombinationalOptStrategy) => void
+}
+
+const decToBin4 = (n: number): string => {
+  return n.toString(2).padStart(4, '0')
 }
 
 export const CombinationalInputPanel: React.FC<CombinationalInputPanelProps> = ({
@@ -31,6 +43,7 @@ export const CombinationalInputPanel: React.FC<CombinationalInputPanelProps> = (
   onSubtypeChange,
   outputPrefix,
   onOutputPrefixChange,
+  singleRuleRows,
   onSingleRuleRowsChange,
   onConverterRowsChange,
   polarity,
@@ -38,25 +51,47 @@ export const CombinationalInputPanel: React.FC<CombinationalInputPanelProps> = (
   sevenSegChars,
   onSevenSegCharsChange,
   selectedOutputs,
-  onSelectedOutputsChange
+  onSelectedOutputsChange,
+  optStrategy,
+  onOptStrategyChange
 }) => {
   const [converterSubTab, setConverterSubTab] = useState<'presets' | 'custom'>('presets')
   const [numSystemMode, setNumSystemMode] = useState<'decimal' | 'binary'>('decimal')
   const [logicLevelMode, setLogicLevelMode] = useState<'sop_high' | 'pos_low'>('sop_high')
   const [ignoreMode, setIgnoreMode] = useState<SingleRuleIgnoreMode>('none')
-  const [decimalText, setDecimalText] = useState<string>('0, 2, 4, 5, 6, 8, 10, 12, 14, 15')
-  const [binaryText, setBinaryText] = useState<string>('0000, 0010, 0100, 0101, 0110, 1000, 1010, 1100, 1110, 1111')
-  const [customIgnoreDecimalText, setCustomIgnoreDecimalText] = useState<string>('10, 11, 12, 13, 14, 15')
-  const [customIgnoreBinaryText, setCustomIgnoreBinaryText] = useState<string>('1010, 1011, 1100, 1101, 1110, 1111')
+  const [decimalText, setDecimalText] = useState<string>(() => {
+    if (singleRuleRows && singleRuleRows.length > 0) {
+      const active = singleRuleRows.filter((r) => !r.isUnused && r.outputBits[0] === 1).map((r) => r.decimal)
+      if (active.length > 0) return active.join(', ')
+    }
+    return '0, 2, 4, 5, 6, 8, 10, 12, 14, 15'
+  })
+  const [binaryText, setBinaryText] = useState<string>(() => {
+    if (singleRuleRows && singleRuleRows.length > 0) {
+      const active = singleRuleRows.filter((r) => !r.isUnused && r.outputBits[0] === 1).map((r) => r.decimal)
+      if (active.length > 0) return active.map(decToBin4).join(', ')
+    }
+    return '0000, 0010, 0100, 0101, 0110, 1000, 1010, 1100, 1110, 1111'
+  })
+  const [customIgnoreDecimalText, setCustomIgnoreDecimalText] = useState<string>(() => {
+    if (singleRuleRows && singleRuleRows.length > 0) {
+      const unused = singleRuleRows.filter((r) => r.isUnused).map((r) => r.decimal)
+      if (unused.length > 0) return unused.join(', ')
+    }
+    return '10, 11, 12, 13, 14, 15'
+  })
+  const [customIgnoreBinaryText, setCustomIgnoreBinaryText] = useState<string>(() => {
+    if (singleRuleRows && singleRuleRows.length > 0) {
+      const unused = singleRuleRows.filter((r) => r.isUnused).map((r) => r.decimal)
+      if (unused.length > 0) return unused.map(decToBin4).join(', ')
+    }
+    return '1010, 1011, 1100, 1101, 1110, 1111'
+  })
   const [customCodesText, setCustomCodesText] = useState<string>('0000, 0001, 0100, 0101, 0111, 1000, 1001, 1100, 1101, 1111')
   const [customStartDec, setCustomStartDec] = useState<number>(0)
   const [validationError, setValidationError] = useState<string | null>(null)
   const [validationSuccess, setValidationSuccess] = useState<string | null>(null)
   const [activePaletteTab, setActivePaletteTab] = useState<'digits' | 'letters' | 'symbols'>('digits')
-
-  const decToBin4 = (n: number): string => {
-    return n.toString(2).padStart(4, '0')
-  }
 
   const validateAndParseDecimal = (text: string): { valid: boolean; values: number[]; error?: string } => {
     const rawTokens = text.split(/[\s,;]+/).map((t) => t.trim()).filter(Boolean)
@@ -109,6 +144,30 @@ export const CombinationalInputPanel: React.FC<CombinationalInputPanelProps> = (
 
     const uniqueSorted = Array.from(new Set(parsed)).sort((a, b) => a - b)
     return { valid: true, values: uniqueSorted }
+  }
+
+  const handleSwitchNumSystem = (newMode: 'decimal' | 'binary') => {
+    if (newMode === numSystemMode) return
+    if (newMode === 'binary') {
+      const parsed = validateAndParseDecimal(decimalText)
+      if (parsed.valid && parsed.values.length > 0) {
+        setBinaryText(parsed.values.map(decToBin4).join(', '))
+      }
+      const parsedIg = validateAndParseDecimal(customIgnoreDecimalText)
+      if (parsedIg.valid && parsedIg.values.length > 0) {
+        setCustomIgnoreBinaryText(parsedIg.values.map(decToBin4).join(', '))
+      }
+    } else {
+      const parsed = validateAndParseBinary(binaryText)
+      if (parsed.valid && parsed.values.length > 0) {
+        setDecimalText(parsed.values.join(', '))
+      }
+      const parsedIg = validateAndParseBinary(customIgnoreBinaryText)
+      if (parsedIg.valid && parsedIg.values.length > 0) {
+        setCustomIgnoreDecimalText(parsedIg.values.join(', '))
+      }
+    }
+    setNumSystemMode(newMode)
   }
 
   const applySingleRuleNumbers = (
@@ -616,6 +675,38 @@ export const CombinationalInputPanel: React.FC<CombinationalInputPanelProps> = (
             </div>
           </div>
         )}
+
+        {subtype === 'seven_segment' && (
+          <div className="config-item">
+            <label className="config-label">Chiến lược rút gọn bìa Karnaugh:</label>
+            <div className="segmented-control">
+              <button
+                type="button"
+                className={`segmented-btn ${optStrategy === 'auto' ? 'active' : ''}`}
+                onClick={() => onOptStrategyChange('auto')}
+                title="Tự động kiểm tra số ô: ô 1 ít hơn thì rút gọn theo 1 (SOP), ô 0 ít hơn thì rút gọn theo 0 (POS)"
+              >
+                Tự động (Ưu tiên mức ít ô hơn)
+              </button>
+              <button
+                type="button"
+                className={`segmented-btn ${optStrategy === 'sop' ? 'active' : ''}`}
+                onClick={() => onOptStrategyChange('sop')}
+                title="Rút gọn theo mức 1 (Tổng các tích SOP)"
+              >
+                Theo mức 1 (SOP)
+              </button>
+              <button
+                type="button"
+                className={`segmented-btn ${optStrategy === 'pos' ? 'active' : ''}`}
+                onClick={() => onOptStrategyChange('pos')}
+                title="Rút gọn theo mức 0 (Tích các tổng POS)"
+              >
+                Theo mức 0 (POS)
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {subtype === 'single_rule' && (
@@ -627,14 +718,14 @@ export const CombinationalInputPanel: React.FC<CombinationalInputPanelProps> = (
                 <button
                   type="button"
                   className={`segmented-btn ${numSystemMode === 'decimal' ? 'active' : ''}`}
-                  onClick={() => setNumSystemMode('decimal')}
+                  onClick={() => handleSwitchNumSystem('decimal')}
                 >
                   Số thập phân (Hệ 10)
                 </button>
                 <button
                   type="button"
                   className={`segmented-btn ${numSystemMode === 'binary' ? 'active' : ''}`}
-                  onClick={() => setNumSystemMode('binary')}
+                  onClick={() => handleSwitchNumSystem('binary')}
                 >
                   Mã nhị phân 4-bit (Hệ 2)
                 </button>

@@ -104,6 +104,19 @@ export function generateBasicCircuit(
   const stage1GateIds: string[] = []
   const stage1Type = form === 'SOP' ? 'and' : 'or'
 
+  if (groups.length === 0) {
+    const constVal = form === 'SOP' ? '0' : '1'
+    nodes.push({
+      id: 'out-gate',
+      type: 'output',
+      label: `${funcName} = ${constVal}`,
+      x: stage1StartX,
+      y: topOffset,
+      inputs: []
+    })
+    return { width: Math.max(840, stage1StartX + 180), height: totalHeight, railXMap, nodes, wires, taps }
+  }
+
   groups.forEach((g, idx) => {
     const gateId = `stage1-${idx}`
     stage1GateIds.push(gateId)
@@ -292,6 +305,19 @@ export function generateTargetGateCircuit(
   }
 
   const stage1Outputs: { id: string; x: number; y: number; label?: string }[] = []
+
+  if (groups.length === 0) {
+    const constVal = form === 'SOP' ? '0' : '1'
+    nodes.push({
+      id: 'out-pin',
+      type: 'output',
+      label: `${funcName} = ${constVal}`,
+      x: stage1StartX,
+      y: topOffset,
+      inputs: []
+    })
+    return { width: Math.max(840, stage1StartX + 180), height: totalHeight, railXMap, nodes, wires, taps }
+  }
 
   groups.forEach((g, idx) => {
     const groupY = topOffset + idx * gateSpacing
@@ -626,7 +652,7 @@ export function generateTargetGateCircuit(
         })
         finalX = coll1X + 90
       }
-    } else if (stage1Outputs.length >= 3) {
+    } else if (stage1Outputs.length === 3) {
       const s0 = stage1Outputs[0]
       const s1 = stage1Outputs[1]
       const s2 = stage1Outputs[2]
@@ -750,6 +776,191 @@ export function generateTargetGateCircuit(
         })
         finalX = coll2X + 90
       }
+    } else if (stage1Outputs.length >= 4) {
+      const s0 = stage1Outputs[0]
+      const s1 = stage1Outputs[1]
+      const s2 = stage1Outputs[2]
+      const s3 = stage1Outputs[3]
+
+      const mid01Y = (s0.y + s1.y) / 2
+      nodes.push({
+        id: 'coll-pair01',
+        type: gateType,
+        x: coll1X,
+        y: mid01Y,
+        inputs: [s0.id, s1.id]
+      })
+      wires.push({
+        fromNodeId: s0.id,
+        toNodeId: 'coll-pair01',
+        points: [
+          { x: s0.x, y: s0.y },
+          { x: s0.x + 24, y: s0.y },
+          { x: s0.x + 24, y: mid01Y - 8 },
+          { x: coll1X - 24, y: mid01Y - 8 }
+        ]
+      })
+      wires.push({
+        fromNodeId: s1.id,
+        toNodeId: 'coll-pair01',
+        points: [
+          { x: s1.x, y: s1.y },
+          { x: s1.x + 24, y: s1.y },
+          { x: s1.x + 24, y: mid01Y + 8 },
+          { x: coll1X - 24, y: mid01Y + 8 }
+        ]
+      })
+
+      const inv01X = coll1X + 68
+      nodes.push({
+        id: 'coll-inv01',
+        type: gateType,
+        x: inv01X,
+        y: mid01Y,
+        inputs: ['coll-pair01', 'coll-pair01'],
+        tiedInput: true
+      })
+      wires.push({
+        fromNodeId: 'coll-pair01',
+        toNodeId: 'coll-inv01',
+        points: [{ x: coll1X + 24, y: mid01Y }, { x: inv01X - 24, y: mid01Y }]
+      })
+
+      const mid23Y = (s2.y + s3.y) / 2
+      nodes.push({
+        id: 'coll-pair23',
+        type: gateType,
+        x: coll1X,
+        y: mid23Y,
+        inputs: [s2.id, s3.id]
+      })
+      wires.push({
+        fromNodeId: s2.id,
+        toNodeId: 'coll-pair23',
+        points: [
+          { x: s2.x, y: s2.y },
+          { x: s2.x + 24, y: s2.y },
+          { x: s2.x + 24, y: mid23Y - 8 },
+          { x: coll1X - 24, y: mid23Y - 8 }
+        ]
+      })
+      wires.push({
+        fromNodeId: s3.id,
+        toNodeId: 'coll-pair23',
+        points: [
+          { x: s3.x, y: s3.y },
+          { x: s3.x + 24, y: s3.y },
+          { x: s3.x + 24, y: mid23Y + 8 },
+          { x: coll1X - 24, y: mid23Y + 8 }
+        ]
+      })
+
+      const inv23X = coll1X + 68
+      nodes.push({
+        id: 'coll-inv23',
+        type: gateType,
+        x: inv23X,
+        y: mid23Y,
+        inputs: ['coll-pair23', 'coll-pair23'],
+        tiedInput: true
+      })
+      wires.push({
+        fromNodeId: 'coll-pair23',
+        toNodeId: 'coll-inv23',
+        points: [{ x: coll1X + 24, y: mid23Y }, { x: inv23X - 24, y: mid23Y }]
+      })
+
+      const coll2X = inv01X + 78
+      const midFinalY = (mid01Y + mid23Y) / 2
+      nodes.push({
+        id: 'coll-final',
+        type: gateType,
+        x: coll2X,
+        y: midFinalY,
+        inputs: ['coll-inv01', 'coll-inv23']
+      })
+      wires.push({
+        fromNodeId: 'coll-inv01',
+        toNodeId: 'coll-final',
+        points: [
+          { x: inv01X + 24, y: mid01Y },
+          { x: inv01X + 44, y: mid01Y },
+          { x: inv01X + 44, y: midFinalY - 8 },
+          { x: coll2X - 24, y: midFinalY - 8 }
+        ]
+      })
+      wires.push({
+        fromNodeId: 'coll-inv23',
+        toNodeId: 'coll-final',
+        points: [
+          { x: inv23X + 24, y: mid23Y },
+          { x: inv23X + 44, y: mid23Y },
+          { x: inv23X + 44, y: midFinalY + 8 },
+          { x: coll2X - 24, y: midFinalY + 8 }
+        ]
+      })
+
+      if (needsFinalCollectorInverter) {
+        const finalInvX = coll2X + 68
+        nodes.push({
+          id: 'final-inv',
+          type: gateType,
+          x: finalInvX,
+          y: midFinalY,
+          inputs: ['coll-final', 'coll-final'],
+          tiedInput: true
+        })
+        wires.push({
+          fromNodeId: 'coll-final',
+          toNodeId: 'final-inv',
+          points: [{ x: coll2X + 24, y: midFinalY }, { x: finalInvX - 24, y: midFinalY }]
+        })
+        nodes.push({
+          id: 'out-pin',
+          type: 'output',
+          label: funcName,
+          x: finalInvX + 75,
+          y: midFinalY,
+          inputs: ['final-inv']
+        })
+        wires.push({
+          fromNodeId: 'final-inv',
+          toNodeId: 'out-pin',
+          points: [{ x: finalInvX + 24, y: midFinalY }, { x: finalInvX + 60, y: midFinalY }]
+        })
+        finalX = finalInvX + 90
+      } else {
+        nodes.push({
+          id: 'out-pin',
+          type: 'output',
+          label: funcName,
+          x: coll2X + 75,
+          y: midFinalY,
+          inputs: ['coll-final']
+        })
+        wires.push({
+          fromNodeId: 'coll-final',
+          toNodeId: 'out-pin',
+          points: [{ x: coll2X + 24, y: midFinalY }, { x: coll2X + 60, y: midFinalY }]
+        })
+        finalX = coll2X + 90
+      }
+    } else if (stage1Outputs.length > 0) {
+      const s0 = stage1Outputs[0]
+      nodes.push({
+        id: 'out-pin',
+        type: 'output',
+        label: funcName,
+        x: s0.x + 80,
+        y: s0.y,
+        inputs: [s0.id]
+      })
+      wires.push({
+        fromNodeId: s0.id,
+        toNodeId: 'out-pin',
+        points: [{ x: s0.x + 24, y: s0.y }, { x: s0.x + 70, y: s0.y }]
+      })
+      finalX = s0.x + 100
     }
   }
 
@@ -758,7 +969,7 @@ export function generateTargetGateCircuit(
 }
 
 export function generateMultiOutputBasicCircuit(
-  outputs: { name: string; groups: KMapGroup[] }[],
+  outputs: { name: string; groups: KMapGroup[]; form?: OptimizationForm }[],
   count: VariableCount,
   form: OptimizationForm = 'SOP'
 ): CircuitDiagram {
@@ -835,8 +1046,9 @@ export function generateMultiOutputBasicCircuit(
 
   outputs.forEach((out, outIdx) => {
     const outGroups = out.groups
-    const stage1Type = form === 'SOP' ? 'and' : 'or'
-    const stage2Type = form === 'SOP' ? 'or' : 'and'
+    const outForm = out.form || form
+    const stage1Type = outForm === 'SOP' ? 'and' : 'or'
+    const stage2Type = outForm === 'SOP' ? 'or' : 'and'
 
     if (outGroups.length === 0) {
       const pinId = `out-${out.name}-${outIdx}`
@@ -883,7 +1095,7 @@ export function generateMultiOutputBasicCircuit(
         nodes.push({
           id: gateId,
           type: stage1Type,
-          label: formatTermDisplay(g, form),
+          label: formatTermDisplay(g, outForm),
           x: stage1StartX,
           y: gateY,
           inputs: [lineKey]
@@ -903,7 +1115,7 @@ export function generateMultiOutputBasicCircuit(
         nodes.push({
           id: gateId,
           type: stage1Type,
-          label: formatTermDisplay(g, form),
+          label: formatTermDisplay(g, outForm),
           x: stage1StartX,
           y: gateY,
           inputs: g.literals.map((l) => (l.inverted ? `~${l.variable}` : l.variable))

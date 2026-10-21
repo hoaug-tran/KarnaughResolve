@@ -5,6 +5,7 @@ import { KMapGrid } from './KMapGrid'
 import { CircuitViewer } from './CircuitViewer'
 import { KaTeXView } from './KaTeXView'
 import { formatSubscript } from '../utils/circuitGenerator'
+import { ArrowUpDown, Sparkles } from 'lucide-react'
 
 interface CombinationalReportViewProps {
   subtype: CombinationalSubtype
@@ -15,6 +16,7 @@ interface CombinationalReportViewProps {
   outputsResults: CombinationalOutputResult[]
   combinedCircuit: CircuitDiagram
   onToggleOutputBit: (rowId: string, outIdx: number) => void
+  onToggleSegmentForm?: (outputName: string) => void
 }
 
 export const CombinationalReportView: React.FC<CombinationalReportViewProps> = ({
@@ -25,9 +27,11 @@ export const CombinationalReportView: React.FC<CombinationalReportViewProps> = (
   rows,
   outputsResults,
   combinedCircuit,
-  onToggleOutputBit
+  onToggleOutputBit,
+  onToggleSegmentForm
 }) => {
   const [hoveredGroup, setHoveredGroup] = useState<string | null>(null)
+  const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
 
   const isSevenSeg = subtype === 'seven_segment'
   const inVarsJoined = inputVars.join(', ')
@@ -113,13 +117,38 @@ export const CombinationalReportView: React.FC<CombinationalReportViewProps> = (
           {outputsResults.map((res) => (
             <div key={res.name} className="single-output-kmap-card">
               <div className="output-kmap-header">
-                <span className="output-badge">
-                  <KaTeXView math={res.name} />
-                </span>
-                <h4>
-                  Bìa Karnaugh cho hàm <KaTeXView math={`${res.name}(${inVarsJoined})`} />
-                </h4>
+                <div className="output-kmap-header-left">
+                  <span className="output-badge">
+                    <KaTeXView math={res.name} />
+                  </span>
+                  <h4>
+                    Bìa Karnaugh cho hàm <KaTeXView math={`${res.name}(${inVarsJoined})`} />
+                  </h4>
+                </div>
+                <div className="output-kmap-header-right">
+                  <span className={`output-strategy-pill ${res.form === 'SOP' ? 'sop' : 'pos'}`}>
+                    {res.form === 'SOP' ? 'Khoanh ô 1 (SOP)' : 'Khoanh ô 0 (POS)'}
+                  </span>
+                  {onToggleSegmentForm && (
+                    <button
+                      type="button"
+                      className="segment-form-switch-btn"
+                      onClick={() => onToggleSegmentForm(res.name)}
+                      title="Bấm để đổi nhanh giữa khoanh theo 1 (SOP) và khoanh theo 0 (POS)"
+                    >
+                      <ArrowUpDown className="w-3.5 h-3.5" />
+                      <span>Đổi dạng</span>
+                    </button>
+                  )}
+                </div>
               </div>
+
+              {res.reasonText && (
+                <div className="output-reason-banner">
+                  <Sparkles className="w-3.5 h-3.5 text-accent-primary shrink-0" />
+                  <span>{res.reasonText}</span>
+                </div>
+              )}
 
               <div className="kmap-with-groups-row">
                 <div className="kmap-left-pane">
@@ -127,10 +156,11 @@ export const CombinationalReportView: React.FC<CombinationalReportViewProps> = (
                     variableCount={4}
                     gridValues={res.gridValues}
                     groups={res.groups}
-                    form="SOP"
-                    hoveredGroup={hoveredGroup}
+                    form={res.form}
+                    hoveredGroup={hoveredGroup ?? selectedGroup}
                     onCellToggle={() => {}}
                     onGroupHover={setHoveredGroup}
+                    onGroupClick={(id) => setSelectedGroup((prev) => (prev === id ? null : id))}
                   />
                 </div>
 
@@ -138,22 +168,39 @@ export const CombinationalReportView: React.FC<CombinationalReportViewProps> = (
                   <span className="groups-title">Các nhóm khoanh tối ưu:</span>
                   <div className="groups-compact-list">
                     {res.groups.length === 0 ? (
-                      <div className="empty-group-text">Hàm đồng nhất = 0</div>
+                      <div className="empty-group-text">
+                        {res.form === 'SOP' ? 'Hàm đồng nhất = 0' : 'Hàm đồng nhất = 1'}
+                      </div>
                     ) : (
-                      res.groups.map((g) => (
-                        <div
-                          key={g.id}
-                          className={`compact-group-item ${hoveredGroup === g.id ? 'active' : ''}`}
-                          onMouseEnter={() => setHoveredGroup(g.id)}
-                          onMouseLeave={() => setHoveredGroup(null)}
-                        >
-                          <span className="group-color-dot" style={{ backgroundColor: g.color }} />
-                          <span className="group-label-bold">
-                            <KaTeXView math={g.label} /> = gộp ({g.cells.join(', ')}) ={' '}
-                          </span>
-                          <KaTeXView math={g.termLatex} />
-                        </div>
-                      ))
+                      res.groups.map((g) => {
+                        const isHovered = hoveredGroup === g.id
+                        const isPinned = selectedGroup === g.id
+                        const isActive = isHovered || isPinned
+                        return (
+                          <div
+                            key={g.id}
+                            className={`compact-group-item ${isActive ? 'active' : ''}`}
+                            style={isActive ? {
+                              borderColor: g.color,
+                              backgroundColor: `${g.color}18`,
+                              boxShadow: isPinned ? `0 0 0 2px ${g.color}` : `0 0 0 1.5px ${g.color}50`,
+                              cursor: 'pointer'
+                            } : { cursor: 'pointer' }}
+                            onClick={() => setSelectedGroup((prev) => (prev === g.id ? null : g.id))}
+                            onMouseEnter={() => setHoveredGroup(g.id)}
+                            onMouseLeave={() => setHoveredGroup(null)}
+                            title={`Nhóm ${g.label}: Bấm để ghim / bỏ ghim`}
+                          >
+                            <span className="group-color-dot" style={{ backgroundColor: g.color }} />
+                            <span className="group-label-bold">
+                              <KaTeXView math={g.label} /> = gộp ({g.cells.join(', ')}) ={' '}
+                            </span>
+                            <span className="group-term-math">
+                              <KaTeXView math={g.termLatex} />
+                            </span>
+                          </div>
+                        )
+                      })
                     )}
                   </div>
 

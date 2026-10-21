@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import type { CellValue, OptimizationForm, TargetGateType, VariableCount } from '../types'
 import { parseNumberList } from '../utils/kmapSolver'
 import { CheckCheck, RotateCcw } from 'lucide-react'
@@ -35,10 +35,17 @@ export const InputPanel: React.FC<InputPanelProps> = ({
   const [dcText, setDcText] = useState<string>('')
   const [expressionText, setExpressionText] = useState<string>("A'B + BC'D")
 
+  const isSelfTypingRef = useRef<boolean>(false)
+
   const targetValue: CellValue = form === 'SOP' ? 1 : 0
 
   useEffect(() => {
     if (!gridValues) return
+    if (isSelfTypingRef.current) {
+      isSelfTypingRef.current = false
+      return
+    }
+
     const total = 1 << variableCount
     const activeTerms: number[] = []
     const activeDc: number[] = []
@@ -52,45 +59,29 @@ export const InputPanel: React.FC<InputPanelProps> = ({
       }
     }
 
-    const currentParsedTerms = parseNumberList(termsText)
-    const isTermsIdentical =
-      currentParsedTerms.length === activeTerms.length &&
-      currentParsedTerms.every((val, idx) => val === activeTerms[idx])
-
-    if (!isTermsIdentical) {
-      setTermsText(activeTerms.join(', '))
-    }
-
-    const currentParsedDc = parseNumberList(dcText)
-    const isDcIdentical =
-      currentParsedDc.length === activeDc.length &&
-      currentParsedDc.every((val, idx) => val === activeDc[idx])
-
-    if (!isDcIdentical) {
-      setDcText(activeDc.join(', '))
-    }
+    setTermsText(activeTerms.join(', '))
+    setDcText(activeDc.join(', '))
   }, [gridValues, form, variableCount, targetValue])
 
-  const handleTermsInput = (newTerms: string, newDc: string) => {
-    setTermsText(newTerms)
-    setDcText(newDc)
-    const parsedTerms = parseNumberList(newTerms)
-    const parsedDc = parseNumberList(newDc)
-    onApplyMinterms(parsedTerms, parsedDc)
+  const handleTermsChange = (val: string) => {
+    setTermsText(val)
+    isSelfTypingRef.current = true
+    const parsedTerms = parseNumberList(val)
+    const currentDc = parseNumberList(dcText).filter((d) => !parsedTerms.includes(d))
+    onApplyMinterms(parsedTerms, currentDc)
   }
 
-  const handleTermsBlur = () => {
-    const parsedTerms = parseNumberList(termsText)
-    setTermsText(parsedTerms.join(', '))
-  }
-
-  const handleDcBlur = () => {
-    const parsedDc = parseNumberList(dcText)
-    setDcText(parsedDc.join(', '))
+  const handleDcChange = (val: string) => {
+    setDcText(val)
+    isSelfTypingRef.current = true
+    const parsedDc = parseNumberList(val)
+    const currentTerms = parseNumberList(termsText).filter((t) => !parsedDc.includes(t))
+    onApplyMinterms(currentTerms, parsedDc)
   }
 
   const handleExpressionInput = (expr: string) => {
     setExpressionText(expr)
+    isSelfTypingRef.current = true
     onApplyExpression(expr)
   }
 
@@ -179,8 +170,7 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                   className="text-input"
                   placeholder="Ví dụ: 1, 2, 4, 5, 9, 10, 12"
                   value={termsText}
-                  onChange={(e) => handleTermsInput(e.target.value, dcText)}
-                  onBlur={handleTermsBlur}
+                  onChange={(e) => handleTermsChange(e.target.value)}
                 />
               </div>
 
@@ -191,8 +181,7 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                   className="text-input"
                   placeholder="Ví dụ: 0, 13, 14"
                   value={dcText}
-                  onChange={(e) => handleTermsInput(termsText, e.target.value)}
-                  onBlur={handleDcBlur}
+                  onChange={(e) => handleDcChange(e.target.value)}
                 />
               </div>
             </div>

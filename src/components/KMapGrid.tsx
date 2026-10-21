@@ -10,6 +10,7 @@ interface KMapGridProps {
   hoveredGroup: string | null
   onCellToggle: (minterm: number) => void
   onGroupHover: (groupId: string | null) => void
+  onGroupClick?: (groupId: string) => void
 }
 
 export const KMapGrid: React.FC<KMapGridProps> = ({
@@ -19,7 +20,8 @@ export const KMapGrid: React.FC<KMapGridProps> = ({
   form,
   hoveredGroup,
   onCellToggle,
-  onGroupHover
+  onGroupHover,
+  onGroupClick
 }) => {
   const { rowVars, colVars } = getGridDimensions(variableCount)
   const rowGrays = getRowGrayCodes(variableCount)
@@ -78,7 +80,9 @@ export const KMapGrid: React.FC<KMapGridProps> = ({
                   const m = cellToMinterm(variableCount, rowIdx, colIdx)
                   const cellVal = gridValues[m] ?? 0
                   const coveringGroups = cellGroupMap[m] || []
-                  const isHovered = hoveredGroup && coveringGroups.some((g) => g.id === hoveredGroup)
+                  const activeGroup = hoveredGroup ? groups.find((g) => g.id === hoveredGroup) : null
+                  const isCellInActive = activeGroup ? activeGroup.cells.includes(m) : false
+                  const hasActiveGroup = !!activeGroup
                   const primaryGroup = coveringGroups[0]
 
                   let cellClass = 'kmap-cell'
@@ -86,14 +90,19 @@ export const KMapGrid: React.FC<KMapGridProps> = ({
                   else if (cellVal === 'd') cellClass += ' cell-dc'
                   else cellClass += ' cell-zero'
 
-                  if (isHovered) cellClass += ' cell-hovered-group'
-
                   const inlineStyle: React.CSSProperties = {}
-                  if (coveringGroups.length > 0) {
-                    inlineStyle.borderColor = isHovered ? '#d97706' : primaryGroup.color
-                    inlineStyle.backgroundColor = isHovered
-                      ? 'rgba(217, 119, 6, 0.08)'
-                      : `${primaryGroup.color}10`
+                  if (hasActiveGroup) {
+                    if (isCellInActive) {
+                      cellClass += ' cell-active-group'
+                      inlineStyle.borderColor = activeGroup.color
+                      inlineStyle.backgroundColor = `${activeGroup.color}25`
+                      inlineStyle.boxShadow = `0 0 0 3px ${activeGroup.color}, 0 4px 14px ${activeGroup.color}50`
+                    } else {
+                      cellClass += ' cell-dimmed'
+                    }
+                  } else if (coveringGroups.length > 0) {
+                    inlineStyle.borderColor = primaryGroup.color
+                    inlineStyle.backgroundColor = `${primaryGroup.color}10`
                   }
 
                   return (
@@ -110,20 +119,37 @@ export const KMapGrid: React.FC<KMapGridProps> = ({
                       </span>
                       {coveringGroups.length > 0 && (
                         <div className="cell-group-tags">
-                          {coveringGroups.map((g) => (
-                            <span
-                              key={g.id}
-                              className="cell-tag"
-                              style={{ backgroundColor: g.color }}
-                              onMouseEnter={(e) => {
-                                e.stopPropagation()
-                                onGroupHover(g.id)
-                              }}
-                              onMouseLeave={() => onGroupHover(null)}
-                            >
-                              {renderSubscriptLabel(g.label)}
-                            </span>
-                          ))}
+                          {coveringGroups.map((g) => {
+                            const isTagActive = hoveredGroup === g.id
+                            return (
+                              <span
+                                key={g.id}
+                                className={`cell-tag ${isTagActive ? 'active-tag' : ''}`}
+                                style={{
+                                  backgroundColor: g.color,
+                                  boxShadow: isTagActive ? `0 0 0 2px #ffffff, 0 0 0 3.5px ${g.color}` : undefined,
+                                  transform: isTagActive ? 'scale(1.18)' : undefined,
+                                  cursor: 'pointer'
+                                }}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  if (onGroupClick) {
+                                    onGroupClick(g.id)
+                                  } else {
+                                    onGroupHover(isTagActive ? null : g.id)
+                                  }
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.stopPropagation()
+                                  onGroupHover(g.id)
+                                }}
+                                onMouseLeave={() => onGroupHover(null)}
+                                title={`Nhóm ${g.label}: Bấm để ghim / bỏ ghim`}
+                              >
+                                {renderSubscriptLabel(g.label)}
+                              </span>
+                            )
+                          })}
                         </div>
                       )}
                     </td>

@@ -9,13 +9,18 @@ interface FormattedMathTextProps {
 export const FormattedMathText: React.FC<FormattedMathTextProps> = ({ text, className = '' }) => {
   if (!text) return null
 
-  const parts = text.split(/(\$[^$]+\$)/g)
+  const parts = text.split(/(\$\$[\s\S]*?\$\$|\$[^$\n]+?\$)/g)
 
   return (
     <span className={className}>
       {parts.map((part, index) => {
-        if (part.startsWith('$') && part.endsWith('$') && part.length > 2) {
-          const math = part.slice(1, -1)
+        if (part.startsWith('$$') && part.endsWith('$$') && part.length >= 4) {
+          const math = part.slice(2, -2).trim()
+          return <KaTeXView key={index} math={math} block />
+        }
+
+        if (part.startsWith('$') && part.endsWith('$') && part.length >= 2) {
+          const math = part.slice(1, -1).trim()
           return <KaTeXView key={index} math={math} />
         }
 

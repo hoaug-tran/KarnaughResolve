@@ -461,6 +461,10 @@ export function solveKMap(
   })
 
   derivedPrimes.sort((a, b) => {
+    if (b.rect.cells.length !== a.rect.cells.length) {
+      return b.rect.cells.length - a.rect.cells.length
+    }
+
     const litsA = a.derived.literals
     const litsB = b.derived.literals
 
@@ -471,10 +475,7 @@ export function solveKMap(
         return litsA[i].inverted ? 1 : -1
       }
     }
-    if (litsA.length !== litsB.length) {
-      return litsA.length - litsB.length
-    }
-    return b.rect.cells.length - a.rect.cells.length || a.rect.cells[0] - b.rect.cells[0]
+    return a.rect.cells[0] - b.rect.cells[0]
   })
 
   const groups: KMapGroup[] = derivedPrimes.map((item, idx) => {

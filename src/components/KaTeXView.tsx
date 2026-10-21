@@ -12,7 +12,8 @@ export const KaTeXView: React.FC<KaTeXViewProps> = ({ math, block = false, class
     try {
       return katex.renderToString(math, {
         displayMode: block,
-        throwOnError: false
+        throwOnError: false,
+        strict: 'ignore'
       })
     } catch {
       return math

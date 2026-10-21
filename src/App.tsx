@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import './App.css'
 import type {
   CellValue,
+  CombinationalOptStrategy,
   CombinationalRow,
   CombinationalSubtype,
   ExamProblemType,
@@ -31,7 +32,7 @@ import { CombinationalReportView } from './components/CombinationalReportView'
 import { CombinationalTruthTable } from './components/CombinationalTruthTable'
 import { HelpModal } from './components/HelpModal'
 import { KaTeXView } from './components/KaTeXView'
-import { CheckCircle2 } from 'lucide-react'
+import { ArrowUpDown, CheckCircle2, Sparkles } from 'lucide-react'
 
 export const App: React.FC = () => {
   const [currentProblem, setCurrentProblem] = useState<ExamProblemType>('cau_1')
@@ -41,8 +42,13 @@ export const App: React.FC = () => {
   const [targetGateType, setTargetGateType] = useState<TargetGateType>('nand_2')
   const [activeTab, setActiveTab] = useState<string>('report')
   const [hoveredGroup, setHoveredGroup] = useState<string | null>(null)
+  const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
   const [isHelpOpen, setIsHelpOpen] = useState<boolean>(false)
+
+  const handleGroupClick = (id: string) => {
+    setSelectedGroup((prev) => (prev === id ? null : id))
+  }
 
   const [gridValues, setGridValues] = useState<Record<number, CellValue>>(() => {
     const initial: Record<number, CellValue> = {}
@@ -59,6 +65,16 @@ export const App: React.FC = () => {
   const [combOutputPrefix, setCombOutputPrefix] = useState<'F' | 'G' | 'Y'>('F')
   const [sevenSegChars, setSevenSegChars] = useState<string>('56789AEdPH')
   const [selectedSegOutputs, setSelectedSegOutputs] = useState<string[]>(['a', 'd', 'g'])
+  const [combOptStrategy, setCombOptStrategy] = useState<CombinationalOptStrategy>('auto')
+  const [segmentFormOverrides, setSegmentFormOverrides] = useState<Record<string, OptimizationForm>>({})
+
+  const handleToggleSegmentForm = (name: string) => {
+    setSegmentFormOverrides((prev) => {
+      const current = prev[name] ?? (combOutputsResults.find((r) => r.name === name)?.form ?? 'SOP')
+      const nextForm: OptimizationForm = current === 'SOP' ? 'POS' : 'SOP'
+      return { ...prev, [name]: nextForm }
+    })
+  }
 
   const [singleRuleRows, setSingleRuleRows] = useState<CombinationalRow[]>(() => {
     const mod2or5 = new Set([0, 2, 4, 5, 6, 8, 10, 12, 14, 15])
@@ -196,17 +212,48 @@ export const App: React.FC = () => {
   const combOutputsResults = useMemo(() => {
     return combOutputVars.map((outVarName, outIdx) => {
       const gValues: Record<number, CellValue> = {}
+      let oneCount = 0
+      let zeroCount = 0
+
       for (let m = 0; m < 16; m++) {
         const row = combAllRows.find((r) => r.decimal === m)
         if (row && !row.isUnused) {
           const bit = row.outputBits[outIdx]
+          if (bit === 1) oneCount++
+          else if (bit === 0) zeroCount++
           gValues[m] = bit === 1 ? 1 : 0
         } else {
           gValues[m] = 'd'
         }
       }
 
-      const { groups: gList, simplifiedLatex: sLatex, simplifiedPlain: sPlain } = solveKMap(4, gValues, 'SOP')
+      let chosenForm: OptimizationForm = 'SOP'
+      let reasonText = ''
+
+      const override = segmentFormOverrides[outVarName]
+      if (override) {
+        chosenForm = override
+        reasonText = `Thủ công: ${chosenForm === 'SOP' ? 'Khoanh theo ô 1 (SOP)' : 'Khoanh theo ô 0 (POS)'} (${oneCount} ô 1, ${zeroCount} ô 0)`
+      } else if (combOptStrategy === 'sop') {
+        chosenForm = 'SOP'
+        reasonText = `Cố định theo ô 1 (SOP: ${oneCount} ô 1, ${zeroCount} ô 0)`
+      } else if (combOptStrategy === 'pos') {
+        chosenForm = 'POS'
+        reasonText = `Cố định theo ô 0 (POS: ${zeroCount} ô 0, ${oneCount} ô 1)`
+      } else {
+        if (oneCount < zeroCount) {
+          chosenForm = 'SOP'
+          reasonText = `Ưu tiên ô 1 (${oneCount} ô 1 < ${zeroCount} ô 0) ➔ Rút gọn theo 1 (SOP) để mạch tối giản nhất`
+        } else if (zeroCount < oneCount) {
+          chosenForm = 'POS'
+          reasonText = `Ưu tiên ô 0 (${zeroCount} ô 0 < ${oneCount} ô 1) ➔ Rút gọn theo 0 (POS) để mạch tối giản nhất`
+        } else {
+          chosenForm = 'SOP'
+          reasonText = `Số ô bằng nhau (${oneCount} ô 1 = ${zeroCount} ô 0) ➔ Mặc định rút gọn theo 1 (SOP)`
+        }
+      }
+
+      const { groups: gList, simplifiedLatex: sLatex, simplifiedPlain: sPlain } = solveKMap(4, gValues, chosenForm)
 
       const uniqueGroups = gList.map((g, gIdx) => ({
         ...g,
@@ -218,10 +265,14 @@ export const App: React.FC = () => {
         groups: uniqueGroups,
         simplifiedLatex: sLatex,
         simplifiedPlain: sPlain,
-        gridValues: gValues
+        gridValues: gValues,
+        form: chosenForm,
+        oneCount,
+        zeroCount,
+        reasonText
       }
     })
-  }, [combOutputVars, combAllRows])
+  }, [combOutputVars, combAllRows, combOptStrategy, segmentFormOverrides])
 
   const combCircuit = useMemo(() => {
     return generateMultiOutputBasicCircuit(combOutputsResults, 4, 'SOP')
@@ -334,9 +385,8 @@ export const App: React.FC = () => {
       />
 
       <main className="main-content">
-        {currentProblem === 'cau_1' ? (
-          <>
-            <div className="no-print">
+        <div style={{ display: currentProblem === 'cau_1' ? 'contents' : 'none' }}>
+          <div className="no-print">
               <InputPanel
                 variableCount={variableCount}
                 form={form}
@@ -364,8 +414,10 @@ export const App: React.FC = () => {
                 transformationSteps={transformationSteps}
                 circuitBasic={circuitBasic}
                 circuitTarget={circuitTarget}
-                hoveredGroup={hoveredGroup}
+                hoveredGroup={hoveredGroup ?? selectedGroup}
+                selectedGroup={selectedGroup}
                 onGroupHover={setHoveredGroup}
+                onGroupClick={handleGroupClick}
                 onCellToggle={handleCellToggle}
               />
             )}
@@ -383,39 +435,57 @@ export const App: React.FC = () => {
                       gridValues={gridValues}
                       groups={groups}
                       form={form}
-                      hoveredGroup={hoveredGroup}
+                      hoveredGroup={hoveredGroup ?? selectedGroup}
                       onCellToggle={handleCellToggle}
                       onGroupHover={setHoveredGroup}
+                      onGroupClick={handleGroupClick}
                     />
                   </div>
                   <div className="exam-groups-pane">
                     <h4 className="exam-subtitle">Chi tiết các nhóm khoanh:</h4>
                     <div className="exam-groups-list">
-                      {groups.map((g) => (
-                        <div
-                          key={g.id}
-                          className={`exam-group-row ${hoveredGroup === g.id ? 'active-hover' : ''}`}
-                          onMouseEnter={() => setHoveredGroup(g.id)}
-                          onMouseLeave={() => setHoveredGroup(null)}
-                        >
-                          <div className="exam-group-pill" style={{ backgroundColor: g.color }}>
-                            <KaTeXView math={g.label} />
-                          </div>
-                          <div className="exam-group-content">
-                            <div className="exam-group-formula">
-                              <span className="font-semibold text-slate-800 dark:text-slate-100">
-                                <KaTeXView math={g.label} /> = Nhóm các ô ({g.cells.join(', ')}) ={' '}
-                              </span>
-                              <KaTeXView math={g.termLatex} />
+                      {groups.map((g) => {
+                        const isActive = (hoveredGroup ?? selectedGroup) === g.id
+                        const isPinned = selectedGroup === g.id
+                        return (
+                          <div
+                            key={g.id}
+                            className={`exam-group-row ${isActive ? 'active-hover' : ''} ${isPinned ? 'pinned' : ''}`}
+                            style={isActive ? {
+                              borderColor: g.color,
+                              backgroundColor: `${g.color}15`,
+                              boxShadow: isPinned ? `0 0 0 2.5px ${g.color}, 0 4px 14px ${g.color}30` : `0 0 0 2px ${g.color}40`
+                            } : undefined}
+                            onClick={() => handleGroupClick(g.id)}
+                            onMouseEnter={() => setHoveredGroup(g.id)}
+                            onMouseLeave={() => setHoveredGroup(null)}
+                            title={`Nhóm ${g.label}: Bấm để ghim / bỏ ghim tô sáng`}
+                          >
+                            <div
+                              className="exam-group-pill"
+                              style={{
+                                backgroundColor: g.color,
+                                boxShadow: isActive ? `0 0 0 2px #ffffff, 0 0 0 3.5px ${g.color}` : undefined
+                              }}
+                            >
+                              <KaTeXView math={g.label} />
                             </div>
-                            {g.eliminatedVariables.length > 0 && (
-                              <div className="exam-group-note">
-                                Loại bỏ được biến: {g.eliminatedVariables.join(', ')} | Giữ lại biến: {g.keptVariables.join(', ')}
+                            <div className="exam-group-content">
+                              <div className="exam-group-formula">
+                                <span className="font-semibold text-slate-800 dark:text-slate-100">
+                                  <KaTeXView math={g.label} /> = Nhóm các ô ({g.cells.join(', ')}) ={' '}
+                                </span>
+                                <KaTeXView math={g.termLatex} />
                               </div>
-                            )}
+                              {g.eliminatedVariables.length > 0 && (
+                                <div className="exam-group-note">
+                                  Loại bỏ được biến: {g.eliminatedVariables.join(', ')} | Giữ lại biến: {g.keptVariables.join(', ')}
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                     <div className="exam-final-result-box">
                       <div className="result-label">
@@ -470,10 +540,10 @@ export const App: React.FC = () => {
                 onCellToggle={handleCellToggle}
               />
             )}
-          </>
-        ) : (
-          <>
-            <div className="no-print">
+        </div>
+
+        <div style={{ display: currentProblem === 'cau_2' ? 'contents' : 'none' }}>
+          <div className="no-print">
               <CombinationalInputPanel
                 subtype={combSubtype}
                 onSubtypeChange={setCombSubtype}
@@ -489,6 +559,11 @@ export const App: React.FC = () => {
                 onSevenSegCharsChange={setSevenSegChars}
                 selectedOutputs={selectedSegOutputs}
                 onSelectedOutputsChange={setSelectedSegOutputs}
+                optStrategy={combOptStrategy}
+                onOptStrategyChange={(s) => {
+                  setCombOptStrategy(s)
+                  setSegmentFormOverrides({})
+                }}
               />
             </div>
 
@@ -502,6 +577,7 @@ export const App: React.FC = () => {
                 outputsResults={combOutputsResults}
                 combinedCircuit={combCircuit}
                 onToggleOutputBit={handleCombToggleOutputBit}
+                onToggleSegmentForm={handleToggleSegmentForm}
               />
             )}
 
@@ -532,13 +608,36 @@ export const App: React.FC = () => {
                   {combOutputsResults.map((res) => (
                     <div key={res.name} className="single-output-kmap-card">
                       <div className="output-kmap-header">
-                        <span className="output-badge">
-                          <KaTeXView math={res.name} />
-                        </span>
-                        <h4>
-                          Bìa Karnaugh cho hàm <KaTeXView math={`${res.name}(${combInputVars.join(', ')})`} />
-                        </h4>
+                        <div className="output-kmap-header-left">
+                          <span className="output-badge">
+                            <KaTeXView math={res.name} />
+                          </span>
+                          <h4>
+                            Bìa Karnaugh cho hàm <KaTeXView math={`${res.name}(${combInputVars.join(', ')})`} />
+                          </h4>
+                        </div>
+                        <div className="output-kmap-header-right">
+                          <span className={`output-strategy-pill ${res.form === 'SOP' ? 'sop' : 'pos'}`}>
+                            {res.form === 'SOP' ? 'Khoanh ô 1 (SOP)' : 'Khoanh ô 0 (POS)'}
+                          </span>
+                          <button
+                            type="button"
+                            className="segment-form-switch-btn"
+                            onClick={() => handleToggleSegmentForm(res.name)}
+                            title="Bấm để đổi nhanh giữa khoanh theo 1 (SOP) và khoanh theo 0 (POS)"
+                          >
+                            <ArrowUpDown className="w-3.5 h-3.5" />
+                            <span>Đổi dạng</span>
+                          </button>
+                        </div>
                       </div>
+
+                      {res.reasonText && (
+                        <div className="output-reason-banner">
+                          <Sparkles className="w-3.5 h-3.5 text-accent-primary shrink-0" />
+                          <span>{res.reasonText}</span>
+                        </div>
+                      )}
 
                       <div className="kmap-with-groups-row">
                         <div className="kmap-left-pane">
@@ -546,10 +645,11 @@ export const App: React.FC = () => {
                             variableCount={4}
                             gridValues={res.gridValues}
                             groups={res.groups}
-                            form="SOP"
-                            hoveredGroup={hoveredGroup}
+                            form={res.form}
+                            hoveredGroup={hoveredGroup ?? selectedGroup}
                             onCellToggle={() => {}}
                             onGroupHover={setHoveredGroup}
+                            onGroupClick={handleGroupClick}
                           />
                         </div>
 
@@ -557,22 +657,36 @@ export const App: React.FC = () => {
                           <span className="groups-title">Các nhóm khoanh tối ưu:</span>
                           <div className="groups-compact-list">
                             {res.groups.length === 0 ? (
-                              <div className="empty-group-text">Hàm đồng nhất = 0</div>
+                              <div className="empty-group-text">
+                                {res.form === 'SOP' ? 'Hàm đồng nhất = 0' : 'Hàm đồng nhất = 1'}
+                              </div>
                             ) : (
-                              res.groups.map((g) => (
-                                <div
-                                  key={g.id}
-                                  className={`compact-group-item ${hoveredGroup === g.id ? 'active' : ''}`}
-                                  onMouseEnter={() => setHoveredGroup(g.id)}
-                                  onMouseLeave={() => setHoveredGroup(null)}
-                                >
-                                  <span className="group-color-dot" style={{ backgroundColor: g.color }} />
-                                  <span className="group-label-bold">
-                                    <KaTeXView math={g.label} /> = gộp ({g.cells.join(', ')}) ={' '}
-                                  </span>
-                                  <KaTeXView math={g.termLatex} />
-                                </div>
-                              ))
+                              res.groups.map((g) => {
+                                const isActive = (hoveredGroup ?? selectedGroup) === g.id
+                                const isPinned = selectedGroup === g.id
+                                return (
+                                  <div
+                                    key={g.id}
+                                    className={`compact-group-item ${isActive ? 'active' : ''}`}
+                                    style={isActive ? {
+                                      borderColor: g.color,
+                                      backgroundColor: `${g.color}18`,
+                                      boxShadow: isPinned ? `0 0 0 2px ${g.color}` : `0 0 0 1.5px ${g.color}50`,
+                                      cursor: 'pointer'
+                                    } : { cursor: 'pointer' }}
+                                    onClick={() => handleGroupClick(g.id)}
+                                    onMouseEnter={() => setHoveredGroup(g.id)}
+                                    onMouseLeave={() => setHoveredGroup(null)}
+                                    title={`Nhóm ${g.label}: Bấm để ghim / bỏ ghim`}
+                                  >
+                                    <span className="group-color-dot" style={{ backgroundColor: g.color }} />
+                                    <span className="group-label-bold">
+                                      <KaTeXView math={g.label} /> = gộp ({g.cells.join(', ')}) ={' '}
+                                    </span>
+                                    <KaTeXView math={g.termLatex} />
+                                  </div>
+                                )
+                              })
                             )}
                           </div>
 
@@ -606,8 +720,7 @@ export const App: React.FC = () => {
                 />
               </div>
             )}
-          </>
-        )}
+        </div>
       </main>
 
       <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />

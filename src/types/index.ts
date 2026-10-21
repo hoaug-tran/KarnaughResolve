@@ -33,6 +33,7 @@ export interface TransformationStep {
   ruleName?: string
   ruleFormula?: string
   latex: string
+  intermediateSignal?: string
 }
 
 export interface CircuitNode {
@@ -91,6 +92,8 @@ export type SingleRuleIgnoreMode = 'remaining_are_unused' | 'none' | 'bcd_10_15'
 
 export type LedPolarity = 'cathode_common' | 'anode_common'
 
+export type CombinationalOptStrategy = 'auto' | 'sop' | 'pos'
+
 export interface CombinationalRow {
   id: string
   decimal: number
@@ -106,4 +109,9 @@ export interface CombinationalOutputResult {
   simplifiedLatex: string
   simplifiedPlain: string
   gridValues: Record<number, CellValue>
+  form: OptimizationForm
+  oneCount: number
+  zeroCount: number
+  reasonText: string
 }
+

@@ -1,5 +1,5 @@
 import React from 'react'
-import { Moon, Printer, Sun } from 'lucide-react'
+import { HelpCircle, Moon, Printer, Sun } from 'lucide-react'
 
 interface NavbarProps {
   currentProblem: 'cau_1' | 'cau_2'
@@ -17,35 +17,68 @@ export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
   onTabChange,
   isDarkMode,
-  onToggleDarkMode
+  onToggleDarkMode,
+  onOpenHelp
 }) => {
   return (
     <header className="navbar-container no-print">
       <div className="navbar-content">
-        <div className="brand-group">
-          <span className="brand-title">KarnaughResolve</span>
-          <div className="problem-segmented-control">
+        <div className="navbar-brand-row">
+          <div className="brand-group">
+            <span className="brand-title">KarnaughResolve</span>
+          </div>
+
+          <div className="nav-right-actions mobile-only-actions">
             <button
               type="button"
-              className={`problem-nav-btn ${currentProblem === 'cau_1' ? 'active' : ''}`}
-              onClick={() => {
-                onProblemChange('cau_1')
-                onTabChange('report')
-              }}
+              className="action-icon-btn"
+              onClick={onOpenHelp}
+              title="Hướng dẫn sử dụng"
             >
-              Câu 1: Rút gọn hàm Boolean
+              <HelpCircle className="w-4 h-4" />
             </button>
             <button
               type="button"
-              className={`problem-nav-btn ${currentProblem === 'cau_2' ? 'active' : ''}`}
-              onClick={() => {
-                onProblemChange('cau_2')
-                onTabChange('report')
-              }}
+              className="action-icon-btn"
+              onClick={() => window.print()}
+              title="In / Lưu PDF"
             >
-              Câu 2: Thiết kế mạch tổ hợp
+              <Printer className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              className="action-icon-btn"
+              onClick={onToggleDarkMode}
+              title={isDarkMode ? 'Chuyển giao diện sáng' : 'Chuyển giao diện tối'}
+            >
+              {isDarkMode ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4 text-slate-500" />}
             </button>
           </div>
+        </div>
+
+        <div className="problem-segmented-control">
+          <button
+            type="button"
+            className={`problem-nav-btn ${currentProblem === 'cau_1' ? 'active' : ''}`}
+            onClick={() => {
+              onProblemChange('cau_1')
+              onTabChange('report')
+            }}
+          >
+            <span className="problem-btn-full">Câu 1: Rút gọn Boolean</span>
+            <span className="problem-btn-short">Câu 1: Rút gọn</span>
+          </button>
+          <button
+            type="button"
+            className={`problem-nav-btn ${currentProblem === 'cau_2' ? 'active' : ''}`}
+            onClick={() => {
+              onProblemChange('cau_2')
+              onTabChange('report')
+            }}
+          >
+            <span className="problem-btn-full">Câu 2: Mạch tổ hợp</span>
+            <span className="problem-btn-short">Câu 2: Mạch tổ hợp</span>
+          </button>
         </div>
 
         <nav className="nav-tabs-wrapper">
@@ -121,7 +154,15 @@ export const Navbar: React.FC<NavbarProps> = ({
           )}
         </nav>
 
-        <div className="nav-right-actions">
+        <div className="nav-right-actions desktop-only-actions">
+          <button
+            type="button"
+            className="action-icon-btn"
+            onClick={onOpenHelp}
+            title="Hướng dẫn sử dụng"
+          >
+            <HelpCircle className="w-4 h-4" />
+          </button>
           <button
             type="button"
             className="action-icon-btn"

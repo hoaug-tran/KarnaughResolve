@@ -20,6 +20,8 @@ interface ExamReportViewProps {
   hoveredGroup: string | null
   onGroupHover: (id: string | null) => void
   onCellToggle: (minterm: number) => void
+  selectedGroup?: string | null
+  onGroupClick?: (id: string) => void
 }
 
 export const ExamReportView: React.FC<ExamReportViewProps> = ({
@@ -35,7 +37,9 @@ export const ExamReportView: React.FC<ExamReportViewProps> = ({
   circuitTarget,
   hoveredGroup,
   onGroupHover,
-  onCellToggle
+  onCellToggle,
+  selectedGroup,
+  onGroupClick
 }) => {
   const gateLabelMap: Record<TargetGateType, string> = {
     basic: 'cổng LOGIC cơ bản (AND, OR, NOT)',
@@ -46,7 +50,6 @@ export const ExamReportView: React.FC<ExamReportViewProps> = ({
   }
 
   const targetGateText = gateLabelMap[targetGateType]
-
 
   return (
     <div className="exam-report-container">
@@ -67,48 +70,73 @@ export const ExamReportView: React.FC<ExamReportViewProps> = ({
               hoveredGroup={hoveredGroup}
               onCellToggle={onCellToggle}
               onGroupHover={onGroupHover}
+              onGroupClick={onGroupClick}
             />
           </div>
 
           <div className="exam-groups-pane">
             <h4 className="exam-subtitle">2. Phân tích các nhóm khoanh tối ưu:</h4>
             <div className="exam-summary-badge">
-              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+              <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
               <span>
-                Khoanh tối ưu: <strong>{groups.length} vòng</strong> (
-                {[
-                  groups.filter((g) => g.cells.length === 8).length > 0 && `${groups.filter((g) => g.cells.length === 8).length} vòng 8 ô`,
-                  groups.filter((g) => g.cells.length === 4).length > 0 && `${groups.filter((g) => g.cells.length === 4).length} vòng 4 ô`,
-                  groups.filter((g) => g.cells.length === 2).length > 0 && `${groups.filter((g) => g.cells.length === 2).length} vòng 2 ô`,
-                  groups.filter((g) => g.cells.length === 1).length > 0 && `${groups.filter((g) => g.cells.length === 1).length} vòng 1 ô`
-                ].filter(Boolean).join(', ')}
-                ) — Không có vòng thừa
+                Khoanh tối ưu theo chuẩn UNETI:{' '}
+                {groups.length === 0 ? (
+                  <strong>Hàm hằng ({simplifiedLatex})</strong>
+                ) : (
+                  <>
+                    <strong>{groups.length} vòng</strong>{' '}
+                    ({[
+                      groups.filter((g) => g.cells.length === 8).length > 0 && `${groups.filter((g) => g.cells.length === 8).length} vòng 8 ô`,
+                      groups.filter((g) => g.cells.length === 4).length > 0 && `${groups.filter((g) => g.cells.length === 4).length} vòng 4 ô`,
+                      groups.filter((g) => g.cells.length === 2).length > 0 && `${groups.filter((g) => g.cells.length === 2).length} vòng 2 ô`,
+                      groups.filter((g) => g.cells.length === 1).length > 0 && `${groups.filter((g) => g.cells.length === 1).length} vòng 1 ô`
+                    ].filter(Boolean).join(', ')}) — Đã phủ trọn ô mục tiêu, không có vòng thừa
+                  </>
+                )}
               </span>
             </div>
             <div className="exam-groups-list">
-              {groups.map((g, idx) => (
-                <div
-                  key={g.id}
-                  className={`exam-group-row ${hoveredGroup === g.id ? 'active-hover' : ''}`}
-                  onMouseEnter={() => onGroupHover(g.id)}
-                  onMouseLeave={() => onGroupHover(null)}
-                >
-                  <div className="exam-group-pill" style={{ backgroundColor: g.color }}>
-                    <KaTeXView math={g.label} />
-                  </div>
-                  <div className="exam-group-content">
-                    <div className="exam-group-formula">
-                      <KaTeXView math={`Y_{${idx + 1}} = ${g.label}(${g.cells.join(', ')}) = ${g.termLatex}`} />
-                      <span className="exam-group-size-tag">Vòng {g.cells.length} ô</span>
+              {groups.map((g, idx) => {
+                const isHovered = hoveredGroup === g.id
+                const isSelected = selectedGroup === g.id
+                const isActive = isHovered || isSelected
+                return (
+                  <div
+                    key={g.id}
+                    className={`exam-group-row ${isActive ? 'active-hover' : ''} ${isSelected ? 'pinned' : ''}`}
+                    style={isActive ? {
+                      borderColor: g.color,
+                      backgroundColor: `${g.color}15`,
+                      boxShadow: isSelected ? `0 0 0 2.5px ${g.color}, 0 4px 14px ${g.color}30` : `0 0 0 2px ${g.color}40`
+                    } : undefined}
+                    onClick={() => onGroupClick ? onGroupClick(g.id) : onGroupHover(isActive ? null : g.id)}
+                    onMouseEnter={() => onGroupHover(g.id)}
+                    onMouseLeave={() => onGroupHover(null)}
+                    title={`Nhóm ${g.label}: Bấm để ghim / bỏ ghim tô sáng`}
+                  >
+                    <div
+                      className="exam-group-pill"
+                      style={{
+                        backgroundColor: g.color,
+                        boxShadow: isActive ? `0 0 0 2px #ffffff, 0 0 0 3.5px ${g.color}` : undefined
+                      }}
+                    >
+                      <KaTeXView math={g.label} />
                     </div>
-                    {g.eliminatedVariables.length > 0 && (
-                      <div className="exam-group-note">
-                        Loại bỏ biến: {g.eliminatedVariables.join(', ')} | Giữ lại biến: {g.keptVariables.join(', ')}
+                    <div className="exam-group-content">
+                      <div className="exam-group-formula">
+                        <KaTeXView math={`Y_{${idx + 1}} = ${g.label}(${g.cells.join(', ')}) = ${g.termLatex}`} />
+                        <span className="exam-group-size-tag">Vòng {g.cells.length} ô</span>
                       </div>
-                    )}
+                      {g.eliminatedVariables.length > 0 && (
+                        <div className="exam-group-note">
+                          Loại bỏ biến: {g.eliminatedVariables.join(', ')} | Giữ lại biến: {g.keptVariables.join(', ')}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
 
             <div className="exam-final-result-box">
