@@ -1,0 +1,9 @@
+node_modules
+dist
+.git
+.codex
+logs
+*.log
+*.tsbuildinfo
+.env
+.env.*
