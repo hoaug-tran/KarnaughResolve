@@ -2,7 +2,7 @@
 
 **KarnaughResolve** là ứng dụng web hỗ trợ giải bảng Karnaugh (K-Map), tối thiểu hóa hàm Boolean, biến đổi biểu thức logic và dựng sơ đồ mạch số tương ứng.
 
-Trải nghiệm trực tiếp tại: [https://karnaugh.libsys.me](https://karnaugh.libsys.me)
+Trải nghiệm trực tiếp tại: [https://karnaugh.trkhoang.dev](https://karnaugh.trkhoang.dev)
 
 ---
 
@@ -186,6 +186,17 @@ Trong chế độ chỉ sử dụng NAND hoặc NOR, phép NOT được biểu d
 
 ---
 
+## Các dạng đề thi
+
+- **Câu 1:** SOP/POS, ô tùy định, cổng cơ bản và NAND/NOR; 17 bài mẫu lấy từ đề thi, ôn tập và đề cương.
+- **Câu 2:** mạch theo điều kiện, bài 4 ghế kề nhau, chuyển mã theo bảng, LED 7 thanh với cả Anot/Cathode. Chọn ký tự, các thanh cần tìm và kiểu rút gọn.
+- **Câu 3:** đếm tiến, đếm lùi, dãy tùy ý, Z1/Z2; 13 bài mẫu, hỗ trợ JK/RS/D/T và chỉ số Q₁…Qₙ.
+- Chọn bài mẫu để nạp đúng dữ liệu; vẫn có thể sửa các trường nhập. Các bìa đọc kết quả chỉ cho xem nhóm, không đổi dữ liệu khi bấm nhầm.
+
+Đối chiếu nguồn và các trang đề/đáp án không thống nhất: [docs/course-coverage.md](docs/course-coverage.md). Kết quả được kiểm tra theo bảng chân lý; không tự ghép hai bài khác dữ liệu chỉ vì trùng số đề.
+
+---
+
 ## Các chế độ hiển thị
 
 Không gian làm việc được chia thành 5 chế độ chính.
@@ -333,7 +344,7 @@ KarnaughResolve/
 
 ### Yêu cầu
 
-- **Node.js**: 18.0.0 trở lên, khuyến nghị phiên bản LTS.
+- **Node.js**: 22.18.0 trở lên (Docker sử dụng Node 22 LTS).
 - **Package Manager**: `npm`, `pnpm` hoặc `yarn`.
 
 ### 1. Clone repository
@@ -367,6 +378,15 @@ http://localhost:5173
 npm run lint
 ```
 
+### Kiểm thử
+
+```bash
+npm test
+npm run test:exhaustive
+```
+
+Lệnh thứ hai kiểm tra toàn bộ 65.536 hàm Boolean 4 biến, cả SOP/POS, gồm giá trị hàm và chi phí phủ tối thiểu với bộ kiểm tra độc lập.
+
 ### 5. Build production
 
 ```bash
@@ -378,6 +398,15 @@ Sau khi build hoàn tất, các tệp tĩnh được tạo trong:
 ```text
 dist/
 ```
+
+---
+
+## Triển khai Coolify
+
+- Build pack **Dockerfile**, nhánh `main`, cổng container `80`.
+- Docker dùng `npm ci`, chạy kiểm thử rồi build Vite. Nginx phục vụ thư mục `dist`.
+- Health check: `GET /healthz` trả `200`; `/index.html` không cache, tài nguyên có hash được cache dài hạn.
+- Không cần biến môi trường hoặc API backend cho ứng dụng này.
 
 ---
 
