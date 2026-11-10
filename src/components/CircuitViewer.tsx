@@ -24,19 +24,23 @@ function formatSubscript(str: string): string {
 
 export const CircuitViewer: React.FC<CircuitViewerProps> = ({ diagram, title, subtitle }) => {
   const svgRef = useRef<SVGSVGElement | null>(null)
+  const [exportError, setExportError] = useState<string | null>(null)
   const [scale, setScale] = useState<number>(1)
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState<boolean>(false)
   const [dragStart, setDragStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
 
-  const handleMouseDown = (e: React.MouseEvent) => {
+  const handleMouseDown = (e: React.PointerEvent) => {
+    e.currentTarget.setPointerCapture(e.pointerId)
     setIsDragging(true)
-    setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y })
+    const ratio=svgRef.current?.getScreenCTM()?.a ?? 1
+    setDragStart({ x:e.clientX-pan.x*ratio, y:e.clientY-pan.y*ratio })
   }
 
-  const handleMouseMove = (e: React.MouseEvent) => {
+  const handleMouseMove = (e: React.PointerEvent) => {
     if (!isDragging) return
-    setPan({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y })
+    const ratio=svgRef.current?.getScreenCTM()?.a ?? 1
+    setPan({ x:(e.clientX-dragStart.x)/ratio, y:(e.clientY-dragStart.y)/ratio })
   }
 
   const handleMouseUp = () => {
@@ -50,21 +54,36 @@ export const CircuitViewer: React.FC<CircuitViewerProps> = ({ diagram, title, su
     setPan({ x: 0, y: 0 })
   }
 
+  const serializeSvg = () => {
+    const original=svgRef.current!
+    const copy=original.cloneNode(true) as SVGSVGElement
+    copy.setAttribute('width',String(diagram.width))
+    copy.setAttribute('height',String(diagram.height))
+    const source=[original,...original.querySelectorAll('*')],target=[copy,...copy.querySelectorAll('*')]
+    source.forEach((element,index)=>{
+      const style=getComputedStyle(element)
+      for(const property of ['fill','stroke','stroke-width','stroke-dasharray','stroke-linecap','font-family','font-size','font-weight','text-anchor']) (target[index] as SVGElement).style.setProperty(property,style.getPropertyValue(property))
+    })
+    return new XMLSerializer().serializeToString(copy)
+  }
+
   const handleExportSvg = () => {
     if (!svgRef.current) return
-    const svgData = new XMLSerializer().serializeToString(svgRef.current)
+    setExportError(null)
+    const svgData = serializeSvg()
     const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
     link.download = `${title.toLowerCase().replace(/\s+/g, '_')}_circuit.svg`
-    link.click()
-    URL.revokeObjectURL(url)
+    document.body.appendChild(link); link.click(); link.remove()
+    setTimeout(()=>URL.revokeObjectURL(url),1000)
   }
 
   const handleExportPng = () => {
     if (!svgRef.current) return
-    const svgData = new XMLSerializer().serializeToString(svgRef.current)
+    setExportError(null)
+    const svgData = serializeSvg()
     const canvas = document.createElement('canvas')
     const ctx = canvas.getContext('2d')
     const img = new window.Image()
@@ -75,18 +94,24 @@ export const CircuitViewer: React.FC<CircuitViewerProps> = ({ diagram, title, su
     const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' })
     const url = URL.createObjectURL(svgBlob)
 
+    img.onerror = () => { URL.revokeObjectURL(url); setExportError('Không thể tạo PNG từ sơ đồ. Hãy tải SVG hoặc thử lại.') }
     img.onload = () => {
-      if (ctx) {
+      try {
+        if (!ctx) throw new Error('Trình duyệt không hỗ trợ canvas.')
         ctx.fillStyle = '#ffffff'
         ctx.fillRect(0, 0, canvas.width, canvas.height)
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-        const pngUrl = canvas.toDataURL('image/png')
-        const link = document.createElement('a')
-        link.href = pngUrl
-        link.download = `${title.toLowerCase().replace(/\s+/g, '_')}_circuit.png`
-        link.click()
-      }
-      URL.revokeObjectURL(url)
+        canvas.toBlob((blob)=>{
+          if (!blob) { setExportError('Không thể mã hóa PNG. Hãy tải SVG hoặc thử lại.'); return }
+          const pngUrl=URL.createObjectURL(blob)
+          const link=document.createElement('a')
+          link.href=pngUrl
+          link.download=`${title.toLowerCase().replace(/\s+/g, '_')}_circuit.png`
+          document.body.appendChild(link); link.click(); link.remove()
+          setTimeout(()=>URL.revokeObjectURL(pngUrl),1000)
+        },'image/png')
+      } catch(error) { setExportError((error as Error).message) }
+      finally { URL.revokeObjectURL(url) }
     }
     img.src = url
   }
@@ -116,15 +141,15 @@ export const CircuitViewer: React.FC<CircuitViewerProps> = ({ diagram, title, su
           const cx = startX + i * charWidth + charWidth / 2
           return (
             <g key={i}>
-              <text x={cx} y="-23" className="gate-label-text">
+              <text x={cx} y="-28" className="gate-label-text">
                 {el.char}
               </text>
               {el.inverted && (
                 <line
                   x1={cx - 4}
-                  y1="-31.5"
+                  y1="-40"
                   x2={cx + 4}
-                  y2="-31.5"
+                  y2="-40"
                   className="overline-bar"
                 />
               )}
@@ -133,6 +158,22 @@ export const CircuitViewer: React.FC<CircuitViewerProps> = ({ diagram, title, su
         })}
       </g>
     )
+  }
+
+  const renderGatePins = (node: CircuitNode) => {
+    const rounded = node.type === 'or' || node.type === 'nor'
+    const inverted = node.type === 'nand' || node.type === 'nor'
+    const inputWires = diagram.wires.filter((wire)=>wire.toNodeId===node.id)
+    return <g>
+      {inputWires.map((wire,index)=>{
+        const end=wire.points.at(-1)!
+        const y=end.y-node.y
+        const edge=rounded?-13-7*(y/18)**2:-20
+        return <line key={index} x1={end.x-node.x} x2={edge} y1={y} y2={y} className="signal-wire"/>
+      })}
+      <line x1={rounded?20:18} x2={inverted?19.5:28} y1="0" y2="0" className="signal-wire"/>
+      {inverted&&<line x1="26.5" x2="28" y1="0" y2="0" className="signal-wire"/>}
+    </g>
   }
 
   const renderGateSymbol = (node: CircuitNode) => {
@@ -166,6 +207,7 @@ export const CircuitViewer: React.FC<CircuitViewerProps> = ({ diagram, title, su
               d="M -20 -18 H 0 A 18 18 0 0 1 0 18 H -20 Z"
               className="gate-shape"
             />
+            {renderGatePins(node)}
             {node.label && renderGateLabel(node.label)}
           </g>
         )
@@ -176,6 +218,7 @@ export const CircuitViewer: React.FC<CircuitViewerProps> = ({ diagram, title, su
               d="M -20 -18 Q -6 0 -20 18 Q 8 18 20 0 Q 8 -18 -20 -18 Z"
               className="gate-shape"
             />
+            {renderGatePins(node)}
             {node.label && renderGateLabel(node.label)}
           </g>
         )
@@ -187,6 +230,7 @@ export const CircuitViewer: React.FC<CircuitViewerProps> = ({ diagram, title, su
               className="gate-shape"
             />
             <circle cx="23" cy="0" r="3.5" className="gate-bubble" />
+            {renderGatePins(node)}
             {node.label && renderGateLabel(node.label)}
           </g>
         )
@@ -198,6 +242,7 @@ export const CircuitViewer: React.FC<CircuitViewerProps> = ({ diagram, title, su
               className="gate-shape"
             />
             <circle cx="23" cy="0" r="3.5" className="gate-bubble" />
+            {renderGatePins(node)}
             {node.label && renderGateLabel(node.label)}
           </g>
         )
@@ -254,13 +299,15 @@ export const CircuitViewer: React.FC<CircuitViewerProps> = ({ diagram, title, su
         </div>
       </div>
 
+      {exportError && <p role="alert" className="validation-alert error">{exportError}</p>}
+
       <div
         className="circuit-canvas-area"
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-        style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
+        onPointerDown={handleMouseDown}
+        onPointerMove={handleMouseMove}
+        onPointerUp={handleMouseUp}
+        onPointerCancel={handleMouseUp}
+        style={{ cursor: isDragging ? 'grabbing' : 'grab', touchAction:scale>1?'none':'pan-y' }}
       >
         <svg
           ref={svgRef}
@@ -274,7 +321,7 @@ export const CircuitViewer: React.FC<CircuitViewerProps> = ({ diagram, title, su
               <line
                 key={key}
                 x1={rx}
-                y1={key.startsWith('~') ? 126 : 42}
+                y1={key.startsWith('~') ? (diagram.nodes.find((node)=>node.id===`lbl-not-${key.slice(1)}`)?.y ?? 114)+12 : 42}
                 x2={rx}
                 y2={diagram.height - 25}
                 className={key.startsWith('~') ? 'bus-wire bus-inverted' : 'bus-wire bus-direct'}

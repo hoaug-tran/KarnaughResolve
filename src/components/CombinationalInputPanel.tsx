@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { COURSE_RULE_PRESETS, COURSE_CODE_PRESETS, courseCodeRows } from '../utils/coursePresets'
 import type {
   CombinationalOptStrategy,
   CombinationalRow,
@@ -7,7 +8,7 @@ import type {
   SingleRuleIgnoreMode
 } from '../types'
 import {
-  COMMON_7SEG_PRESETS,
+  COMMON_7SEG_PRESETS, SEGMENT_MAP,
   DIGIT_CHARS,
   LETTER_CHARS,
   type SegmentName,
@@ -319,7 +320,8 @@ export const CombinationalInputPanel: React.FC<CombinationalInputPanelProps> = (
     nums: number[],
     label: string,
     presetIgnoreMode: SingleRuleIgnoreMode = 'none',
-    customIgnores?: number[]
+    customIgnores?: number[],
+    overrideLevel?: 'sop_high' | 'pos_low'
   ) => {
     setDecimalText(nums.join(', '))
     setBinaryText(nums.map(decToBin4).join(', '))
@@ -329,7 +331,8 @@ export const CombinationalInputPanel: React.FC<CombinationalInputPanelProps> = (
       setCustomIgnoreBinaryText(customIgnores.map(decToBin4).join(', '))
     }
     setValidationError(null)
-    const isHigh = logicLevelMode === 'sop_high'
+    if (overrideLevel) setLogicLevelMode(overrideLevel)
+    const isHigh = (overrideLevel ?? logicLevelMode) === 'sop_high'
     applySingleRuleNumbers(nums, isHigh, presetIgnoreMode, customIgnores)
     setValidationSuccess(`Đã áp dụng bài toán "${label}": {${nums.join(', ')}}`)
   }
@@ -523,8 +526,8 @@ export const CombinationalInputPanel: React.FC<CombinationalInputPanelProps> = (
         return
       }
 
-      const token = rawTokens[idx].replace(/[^01]/g, '')
-      if (token.length !== 4) {
+      const token = rawTokens[idx]
+      if (!/^[01]{4}$/.test(token)) {
         setValidationError(`Từ mã "${rawTokens[idx]}" ở vị trí thứ ${idx + 1} không đúng 4 bit (ví dụ: 0101).`)
         setValidationSuccess(null)
         return
@@ -559,7 +562,7 @@ export const CombinationalInputPanel: React.FC<CombinationalInputPanelProps> = (
   }
 
   const handleAddChar = (ch: string) => {
-    if (sevenSegChars.length >= 10) return
+    if (sevenSegChars.length >= 16) return
     onSevenSegCharsChange(sevenSegChars + ch)
   }
 
@@ -861,13 +864,8 @@ export const CombinationalInputPanel: React.FC<CombinationalInputPanelProps> = (
           <div className="presets-banner-row">
             <span className="helper-label">Chọn nhanh bài toán trong giáo trình & đề thi UNETI:</span>
             <div className="palette-buttons-row">
-              <button
-                type="button"
-                className="helper-pill-btn"
-                onClick={() => handlePresetSingleRule([0, 2, 4, 5, 6, 8], 'Chia hết cho 2 hoặc 5 (ĐC C5, BT C7 - BCD)', 'bcd_10_15')}
-              >
-                Chia hết cho 2 hoặc 5 (ĐC C5, BT C7 - BCD)
-              </button>
+              {COURSE_RULE_PRESETS.map((preset)=><button key={preset.label} type="button" className="helper-pill-btn" onClick={()=>handlePresetSingleRule(preset.minterms,preset.label,'none',undefined,'sop_high')}>{preset.label}</button>)}
+
               <button
                 type="button"
                 className="helper-pill-btn"
@@ -940,6 +938,8 @@ export const CombinationalInputPanel: React.FC<CombinationalInputPanelProps> = (
             <div className="standard-presets-grid">
               <div className="helper-label mb-2">Các bài toán chuyển đổi mã trong giáo trình & đề thi UNETI:</div>
               <div className="preset-cards-list">
+                {COURSE_CODE_PRESETS.map((preset)=><button type="button" className="preset-card-item" key={preset.label} onClick={()=>{onOutputPrefixChange('F');onConverterRowsChange(courseCodeRows(preset));setValidationError(null);setValidationSuccess(`Đã áp dụng ${preset.label}`)}}><span className="preset-card-title">{preset.label}</span><span className="preset-card-desc">10 tổ hợp mã hợp lệ; các mã còn lại là X.</span></button>)}
+
                 <button
                   type="button"
                   className="preset-card-item"
@@ -967,7 +967,7 @@ export const CombinationalInputPanel: React.FC<CombinationalInputPanelProps> = (
                   className="preset-card-item"
                   onClick={handleRuleBcdToGray}
                 >
-                  <span className="preset-card-title">Mã BCD 0–9 sang Gray 4-bit (Bài tập C9)</span>
+                  <span className="preset-card-title">Mã BCD 0–9 sang Gray 4-bit</span>
                   <span className="preset-card-desc">
                     Chuyển đổi 10 tổ hợp BCD sang 4 bit mã Gray G₃, G₂, G₁, G₀. Các tổ hợp 10..15 là trạng thái cấm (điền X).
                   </span>
@@ -1103,7 +1103,13 @@ export const CombinationalInputPanel: React.FC<CombinationalInputPanelProps> = (
               type="text"
               className="styled-text-input mono text-lg font-bold"
               value={sevenSegChars}
-              onChange={(e) => onSevenSegCharsChange(e.target.value.replace(/\s+/g, ''))}
+              maxLength={16}
+              aria-label="Ký tự LED, tối đa 16"
+              onChange={(e) => {
+                const next=e.target.value.replace(/\s+/g,'')
+                if(Array.from(next).some((char)=>!SEGMENT_MAP[char]&&!SEGMENT_MAP[char.toUpperCase()])) {setValidationError('Ký tự LED không hỗ trợ. Chọn ký tự từ bảng bên dưới.');return}
+                setValidationError(null);onSevenSegCharsChange(next)
+              }}
               placeholder="Ví dụ: 56789AEdPH hoặc 456789AbC hoặc 123456789A"
             />
           </div>

@@ -112,9 +112,13 @@ export const CombinationalTruthTable: React.FC<CombinationalTruthTableProps> = (
                 {row.outputBits.map((b, bIdx) => (
                   <td
                     key={bIdx}
-                    className={`cell-bit font-mono ${onToggleOutputBit ? 'clickable' : ''}`}
-                    onClick={() => onToggleOutputBit?.(row.id, bIdx)}
-                    title={onToggleOutputBit ? 'Click để đổi giá trị 0/1' : undefined}
+                    className={`cell-bit font-mono ${onToggleOutputBit && !isSevenSegment ? 'clickable' : ''}`}
+                    role={onToggleOutputBit && !isSevenSegment ? 'button' : undefined}
+                    tabIndex={onToggleOutputBit && !isSevenSegment ? 0 : undefined}
+                    aria-label={`${outputVars[bIdx]}, đầu vào ${row.decimal}, giá trị ${b}`}
+                    onKeyDown={onToggleOutputBit && !isSevenSegment ? (event)=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();onToggleOutputBit(row.id,bIdx)}} : undefined}
+                    onClick={onToggleOutputBit && !isSevenSegment ? () => onToggleOutputBit(row.id, bIdx) : undefined}
+                    title={onToggleOutputBit && !isSevenSegment ? 'Bấm hoặc Enter để đổi giá trị 0/1' : undefined}
                   >
                     <span className={b === 1 ? 'bit-one' : 'bit-zero'}>
                       {b}

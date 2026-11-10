@@ -61,9 +61,13 @@ export interface SevenSegPreset {
 }
 
 export const COMMON_7SEG_PRESETS: SevenSegPreset[] = [
+  {label:'Đề 16 · 7,8,9,A,b,E,°,H,P · b,c,d · Cathode',chars:['7','8','9','A','b','E','°','H','P'],segments:['b','c','d'],polarity:'cathode_common'},
+  {label:'Đề 19 / Ôn tập 2_6 · 4,5,6,7,8,9,A,b,C · e,f,g · Cathode',chars:['4','5','6','7','8','9','A','b','C'],segments:['e','f','g'],polarity:'cathode_common'},
+  {label:'Ôn tập 2_4 · 7,8,9,A,b,C,d,E,F · a,b,c · Cathode',chars:['7','8','9','A','b','C','d','E','F'],segments:['a','b','c'],polarity:'cathode_common'},
+  {label:'Ôn tập 2_5 · 7,8,9,A,b,C,d,E,F · a,b,c · Anot',chars:['7','8','9','A','b','C','d','E','F'],segments:['a','b','c'],polarity:'anode_common'},
   {
-    label: '5, 6, 7, 8, 9, A, E, d, P, H (Đề cương C6: b, c, d)',
-    chars: ['5', '6', '7', '8', '9', 'A', 'E', 'd', 'P', 'H'],
+    label: '5, 6, 7, 8, 9, A, E, °, H (Đề cương C6: b, c, d)',
+    chars: ['5', '6', '7', '8', '9', 'A', 'E', '°', 'H'],
     segments: ['b', 'c', 'd'],
     polarity: 'cathode_common'
   },

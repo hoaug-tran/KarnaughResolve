@@ -8,7 +8,8 @@ interface KMapGridProps {
   groups: KMapGroup[]
   form: OptimizationForm
   hoveredGroup: string | null
-  onCellToggle: (minterm: number) => void
+  onCellToggle?: (minterm: number) => void
+  variableNames?: string[]
   onGroupHover: (groupId: string | null) => void
   onGroupClick?: (groupId: string) => void
 }
@@ -21,7 +22,7 @@ export const KMapGrid: React.FC<KMapGridProps> = ({
   hoveredGroup,
   onCellToggle,
   onGroupHover,
-  onGroupClick
+  onGroupClick, variableNames
 }) => {
   const { rowVars, colVars } = getGridDimensions(variableCount)
   const rowGrays = getRowGrayCodes(variableCount)
@@ -58,9 +59,9 @@ export const KMapGrid: React.FC<KMapGridProps> = ({
             <tr>
               <th className="kmap-corner-header">
                 <div className="kmap-diagonal-header">
-                  <span className="col-var-label">{colVars.join('')}</span>
+                  <span className="col-var-label">{variableNames ? variableNames.slice(rowVars.length).map((variable)=><React.Fragment key={variable}>{renderSubscriptLabel(variable)}</React.Fragment>) : colVars.join('')}</span>
                   <span className="diagonal-slash">/</span>
-                  <span className="row-var-label">{rowVars.join('')}</span>
+                  <span className="row-var-label">{variableNames ? variableNames.slice(0,rowVars.length).map((variable)=><React.Fragment key={variable}>{renderSubscriptLabel(variable)}</React.Fragment>) : rowVars.join('')}</span>
                 </div>
               </th>
               {colGrays.map((val, colIdx) => (
@@ -110,8 +111,12 @@ export const KMapGrid: React.FC<KMapGridProps> = ({
                       key={colIdx}
                       className={cellClass}
                       style={inlineStyle}
-                      onClick={() => onCellToggle(m)}
-                      title={`Minterm ${m} (${formatGray(m, variableCount)}): Đổi 0 ➔ 1 ➔ X`}
+                      role={onCellToggle ? 'button' : undefined}
+                      tabIndex={onCellToggle ? 0 : undefined}
+                      onKeyDown={onCellToggle ? (event)=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();onCellToggle(m)}} : undefined}
+                      onClick={onCellToggle ? () => onCellToggle(m) : undefined}
+                      aria-label={`Ô ${m}, giá trị ${cellVal === 'd' ? 'X' : cellVal}`}
+                      title={`Minterm ${m} (${formatGray(m, variableCount)})${onCellToggle ? ': Đổi 0 ➔ 1 ➔ X' : ''}`}
                     >
                       <span className="cell-index">{m}</span>
                       <span className="cell-value">

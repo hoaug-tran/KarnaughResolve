@@ -158,7 +158,7 @@ export const CombinationalReportView: React.FC<CombinationalReportViewProps> = (
                     groups={res.groups}
                     form={res.form}
                     hoveredGroup={hoveredGroup ?? selectedGroup}
-                    onCellToggle={() => {}}
+
                     onGroupHover={setHoveredGroup}
                     onGroupClick={(id) => setSelectedGroup((prev) => (prev === id ? null : id))}
                   />

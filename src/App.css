@@ -812,7 +812,7 @@
 }
 
 .signal-wire {
-  stroke: #475569;
+  stroke: var(--text-secondary);
   stroke-width: 1.6;
 }
 
@@ -824,13 +824,13 @@
 
 .gate-shape {
   fill: var(--bg-card);
-  stroke: #334155;
+  stroke: var(--text-secondary);
   stroke-width: 1.8;
 }
 
 .gate-bubble {
   fill: var(--bg-card);
-  stroke: #334155;
+  stroke: var(--text-secondary);
   stroke-width: 1.8;
 }
 
@@ -3107,3 +3107,29 @@ html.dark .row-unused {
 }
 
 
+
+/* Câu 3 reuses the shared input, button and report styles. */
+.sequential-panel { display:grid; grid-template-columns:minmax(0,1fr); min-width:0; width:100%; gap:14px; }
+.sequential-panel > section { min-width:0; max-width:100%; }
+.sequential-panel .table-responsive-scroll { flex:none; min-width:0; }
+.sequential-error { color:var(--accent-danger,#b91c1c); }
+.sequential-sequence { font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.sequential-maps { grid-template-columns:repeat(auto-fit,minmax(min(100%,430px),1fr)); gap:20px; }
+.sequential-function { min-width:0; }
+.sequential-panel .segmented-control { flex-wrap:wrap; }
+.sequential-function .output-kmap-header h4 { margin:0; }
+.sequential-function .sequential-map-result { margin:24px 0 0; }
+.seq-integrated { margin:16px 0; }
+.seq-diagram-toolbar { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
+.seq-diagram-scroll { width:100%; overflow:auto; max-height:850px; border:1px solid var(--border-color); }
+.seq-diagram-scroll svg { display:block; max-width:none; }
+.seq-diagram-label { font:15px var(--font-mono); fill:var(--text-primary); }
+.seq-diagram-note { font:12px var(--font-mono); fill:var(--text-primary); }
+.seq-diagram-background { fill:var(--bg-card); }
+.sequential-function .katex-render { display:inline-block; max-width:100%; overflow:visible; vertical-align:middle; }
+.sequential-function .katex { white-space:normal; overflow-wrap:anywhere; }
+.sequential-state-table { width:100%; }
+.sequential-state-table .first-unused-row td { border-top:3px solid var(--accent-danger,#dc2626) !important; }
+@media print { .seq-diagram-scroll { max-height:none; overflow:visible; } .seq-diagram-scroll svg { width:100%; height:auto; } }
+
+dialog.modal-backdrop { width:100%; max-width:none; height:100%; max-height:none; margin:0; padding:0; border:0; color:var(--text-primary); }

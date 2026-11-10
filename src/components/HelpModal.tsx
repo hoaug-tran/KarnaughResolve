@@ -1,4 +1,4 @@
-import React from 'react'
+import React, {useEffect,useRef} from 'react'
 import { BookOpen, Check, X } from 'lucide-react'
 
 interface HelpModalProps {
@@ -7,17 +7,19 @@ interface HelpModalProps {
 }
 
 export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
+  const dialogRef=useRef<HTMLDialogElement>(null)
+  useEffect(()=>{if(isOpen&&!dialogRef.current?.open)dialogRef.current?.showModal()},[isOpen])
   if (!isOpen) return null
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <dialog ref={dialogRef} className="modal-backdrop" aria-labelledby="help-title" onCancel={onClose} onClick={onClose}>
       <div className="modal-card" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <div className="flex items-center gap-2">
             <BookOpen className="w-5 h-5 text-indigo-500" />
-            <h3 className="modal-title">Tài Liệu Hướng Dẫn & Quy Chuẩn Khoa Học</h3>
+            <h3 id="help-title" className="modal-title">Tài Liệu Hướng Dẫn & Quy Chuẩn Khoa Học</h3>
           </div>
-          <button type="button" className="modal-close-btn" onClick={onClose}>
+          <button type="button" className="modal-close-btn" aria-label="Đóng hướng dẫn" onClick={onClose}>
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -41,14 +43,17 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
           <section className="modal-section">
             <h4 className="section-title">2. Phương pháp biến đổi gạch ngang đại số Boole (Câu c)</h4>
             <p className="modal-text">
-              Hệ thống áp dụng định luật hoàn nguyên (phủ định kép toàn phần) và định luật De Morgan, biểu diễn từng tầng gạch ngang trên đầu không dùng phương pháp thế:
+              Chọn vị trí phủ định kép theo dạng biểu thức và loại cổng, rồi áp dụng De Morgan:
             </p>
             <ul className="modal-list">
               <li>
-                <strong>Chuyển sang NAND:</strong> Lấy phủ định 2 lần toàn bộ biểu thức tuyển, sau đó áp dụng De Morgan cho dấu gạch phía dưới để chuyển các phép cộng thành tích các thừa số NAND. Với cổng NAND 2 đầu vào, các tích 3 hoặc 4 biến được phân rã thành cặp 2 đầu vào nối tiếp với cổng NAND đảo (chập 2 chân vào).
+                <strong>SOP → NAND, POS → NOR:</strong> Phủ định kép toàn biểu thức, rồi áp dụng De Morgan cho dấu phủ định bên trong.
               </li>
               <li>
-                <strong>Chuyển sang NOR:</strong> Lấy phủ định 2 lần toàn phần, áp dụng De Morgan cho từng số hạng tích để chuyển thành dạng đảo tổng (NOR). Các tầng gom OR được chuyển thành cây NOR 2 đầu vào.
+                <strong>POS → NAND, SOP → NOR:</strong> Phủ định kép từng tổng/tích, biến đổi từng thành phần bằng De Morgan và giữ phép nối bên ngoài.
+              </li>
+              <li>
+                <strong>Cổng 2 đầu vào:</strong> Gom từng cặp và thêm phủ định kép để giữ nguyên giá trị; không ghép NAND/NOR như phép toán có tính kết hợp. Cổng đảo thực hiện bằng NAND/NOR chập hai đầu vào.
               </li>
             </ul>
           </section>
@@ -61,6 +66,6 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
           </button>
         </div>
       </div>
-    </div>
+    </dialog>
   )
 }

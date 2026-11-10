@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import './App.css'
+import {booleanExampleGrid} from './utils/coursePresets'
+import {solveCombinationalOutputs} from './utils/combinationalSolver'
 import type {
   CellValue,
   CombinationalOptStrategy,
@@ -30,6 +32,7 @@ import { TruthTableView } from './components/TruthTableView'
 import { CombinationalInputPanel } from './components/CombinationalInputPanel'
 import { CombinationalReportView } from './components/CombinationalReportView'
 import { CombinationalTruthTable } from './components/CombinationalTruthTable'
+import { SequentialPanel } from './components/SequentialPanel'
 import { HelpModal } from './components/HelpModal'
 import { KaTeXView } from './components/KaTeXView'
 import { ArrowUpDown, CheckCircle2, Sparkles } from 'lucide-react'
@@ -67,14 +70,6 @@ export const App: React.FC = () => {
   const [selectedSegOutputs, setSelectedSegOutputs] = useState<string[]>(['a', 'd', 'g'])
   const [combOptStrategy, setCombOptStrategy] = useState<CombinationalOptStrategy>('auto')
   const [segmentFormOverrides, setSegmentFormOverrides] = useState<Record<string, OptimizationForm>>({})
-
-  const handleToggleSegmentForm = (name: string) => {
-    setSegmentFormOverrides((prev) => {
-      const current = prev[name] ?? (combOutputsResults.find((r) => r.name === name)?.form ?? 'SOP')
-      const nextForm: OptimizationForm = current === 'SOP' ? 'POS' : 'SOP'
-      return { ...prev, [name]: nextForm }
-    })
-  }
 
   const [singleRuleRows, setSingleRuleRows] = useState<CombinationalRow[]>(() => {
     const mod2or5 = new Set([0, 2, 4, 5, 6, 8, 10, 12, 14, 15])
@@ -209,70 +204,16 @@ export const App: React.FC = () => {
     return [...validRows, ...unusedRows]
   }, [combSubtype, singleRuleRows, sevenSegChars, combPolarity, selectedSegOutputs, customConverterRows, combOutputVars])
 
-  const combOutputsResults = useMemo(() => {
-    return combOutputVars.map((outVarName, outIdx) => {
-      const gValues: Record<number, CellValue> = {}
-      let oneCount = 0
-      let zeroCount = 0
+  const combOutputsResults = useMemo(() => solveCombinationalOutputs(combOutputVars,combAllRows,combOptStrategy,segmentFormOverrides), [combOutputVars,combAllRows,combOptStrategy,segmentFormOverrides])
 
-      for (let m = 0; m < 16; m++) {
-        const row = combAllRows.find((r) => r.decimal === m)
-        if (row && !row.isUnused) {
-          const bit = row.outputBits[outIdx]
-          if (bit === 1) oneCount++
-          else if (bit === 0) zeroCount++
-          gValues[m] = bit === 1 ? 1 : 0
-        } else {
-          gValues[m] = 'd'
-        }
-      }
-
-      let chosenForm: OptimizationForm = 'SOP'
-      let reasonText = ''
-
-      const override = segmentFormOverrides[outVarName]
-      if (override) {
-        chosenForm = override
-        reasonText = `Thủ công: ${chosenForm === 'SOP' ? 'Khoanh theo ô 1 (SOP)' : 'Khoanh theo ô 0 (POS)'} (${oneCount} ô 1, ${zeroCount} ô 0)`
-      } else if (combOptStrategy === 'sop') {
-        chosenForm = 'SOP'
-        reasonText = `Cố định theo ô 1 (SOP: ${oneCount} ô 1, ${zeroCount} ô 0)`
-      } else if (combOptStrategy === 'pos') {
-        chosenForm = 'POS'
-        reasonText = `Cố định theo ô 0 (POS: ${zeroCount} ô 0, ${oneCount} ô 1)`
-      } else {
-        if (oneCount < zeroCount) {
-          chosenForm = 'SOP'
-          reasonText = `Ưu tiên ô 1 (${oneCount} ô 1 < ${zeroCount} ô 0) ➔ Rút gọn theo 1 (SOP) để mạch tối giản nhất`
-        } else if (zeroCount < oneCount) {
-          chosenForm = 'POS'
-          reasonText = `Ưu tiên ô 0 (${zeroCount} ô 0 < ${oneCount} ô 1) ➔ Rút gọn theo 0 (POS) để mạch tối giản nhất`
-        } else {
-          chosenForm = 'SOP'
-          reasonText = `Số ô bằng nhau (${oneCount} ô 1 = ${zeroCount} ô 0) ➔ Mặc định rút gọn theo 1 (SOP)`
-        }
-      }
-
-      const { groups: gList, simplifiedLatex: sLatex, simplifiedPlain: sPlain } = solveKMap(4, gValues, chosenForm)
-
-      const uniqueGroups = gList.map((g, gIdx) => ({
-        ...g,
-        id: `${outVarName}-grp-${gIdx}`
-      }))
-
-      return {
-        name: outVarName,
-        groups: uniqueGroups,
-        simplifiedLatex: sLatex,
-        simplifiedPlain: sPlain,
-        gridValues: gValues,
-        form: chosenForm,
-        oneCount,
-        zeroCount,
-        reasonText
-      }
+  const handleToggleSegmentForm = (name: string) => {
+    setSegmentFormOverrides((prev) => {
+      const current = prev[name] ?? (combOutputsResults.find((r) => r.name === name)?.form ?? 'SOP')
+      const nextForm: OptimizationForm = current === 'SOP' ? 'POS' : 'SOP'
+      return { ...prev, [name]: nextForm }
     })
-  }, [combOutputVars, combAllRows, combOptStrategy, segmentFormOverrides])
+  }
+
 
   const combCircuit = useMemo(() => {
     return generateMultiOutputBasicCircuit(combOutputsResults, 4, 'SOP')
@@ -350,15 +291,15 @@ export const App: React.FC = () => {
 
   const handleApplyExpression = (expr: string) => {
     const { minterms, dontCares } = parseExpression(expr, variableCount)
-    handleApplyMinterms(minterms, dontCares)
+    const terms = form === 'SOP' ? minterms : Array.from({length:1<<variableCount},(_,m)=>m).filter((m)=>!minterms.includes(m)&&!dontCares.includes(m))
+    handleApplyMinterms(terms, dontCares)
   }
 
   const handleClear = () => {
     const total = 1 << variableCount
     const next: Record<number, CellValue> = {}
-    const defaultVal: CellValue = form === 'SOP' ? 0 : 1
     for (let i = 0; i < total; i++) {
-      next[i] = defaultVal
+      next[i] = 0
     }
     setGridValues(next)
   }
@@ -397,6 +338,7 @@ export const App: React.FC = () => {
                 onTargetGateChange={setTargetGateType}
                 onApplyMinterms={handleApplyMinterms}
                 onApplyExpression={handleApplyExpression}
+                onApplyExample={(example)=>{setVariableCount(4);setForm(example.form);setTargetGateType(example.gate);setGridValues(booleanExampleGrid(example))}}
                 onClear={handleClear}
                 onSetAll={handleSetAll}
               />
@@ -647,7 +589,7 @@ export const App: React.FC = () => {
                             groups={res.groups}
                             form={res.form}
                             hoveredGroup={hoveredGroup ?? selectedGroup}
-                            onCellToggle={() => {}}
+
                             onGroupHover={setHoveredGroup}
                             onGroupClick={handleGroupClick}
                           />
@@ -721,6 +663,7 @@ export const App: React.FC = () => {
               </div>
             )}
         </div>
+        <div style={{display:currentProblem==='cau_3'?'contents':'none'}}><SequentialPanel activeTab={activeTab}/></div>
       </main>
 
       <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />

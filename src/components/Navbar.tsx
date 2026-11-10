@@ -2,8 +2,8 @@ import React from 'react'
 import { HelpCircle, Moon, Printer, Sun } from 'lucide-react'
 
 interface NavbarProps {
-  currentProblem: 'cau_1' | 'cau_2'
-  onProblemChange: (problem: 'cau_1' | 'cau_2') => void
+  currentProblem: 'cau_1' | 'cau_2' | 'cau_3'
+  onProblemChange: (problem: 'cau_1' | 'cau_2' | 'cau_3') => void
   activeTab: string
   onTabChange: (tab: any) => void
   isDarkMode: boolean
@@ -79,6 +79,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span className="problem-btn-full">Câu 2: Mạch tổ hợp</span>
             <span className="problem-btn-short">Câu 2: Mạch tổ hợp</span>
           </button>
+          <button type="button" className={`problem-nav-btn ${currentProblem === 'cau_3' ? 'active' : ''}`} onClick={() => { onProblemChange('cau_3'); onTabChange('report') }}><span className="problem-btn-full">Câu 3: Mạch dãy</span><span className="problem-btn-short">Câu 3: Mạch dãy</span></button>
         </div>
 
         <nav className="nav-tabs-wrapper">

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import type { CellValue, OptimizationForm, TargetGateType, VariableCount } from '../types'
+import {BOOLEAN_EXAMPLES,type BooleanExample} from '../utils/coursePresets'
 import { parseNumberList } from '../utils/kmapSolver'
 import { CheckCheck, RotateCcw } from 'lucide-react'
 
@@ -13,6 +14,7 @@ interface InputPanelProps {
   onTargetGateChange: (gate: TargetGateType) => void
   onApplyMinterms: (terms: number[], dontCares: number[]) => void
   onApplyExpression: (expr: string) => void
+  onApplyExample: (example:BooleanExample)=>void
   onClear: () => void
   onSetAll: (val: CellValue) => void
 }
@@ -27,9 +29,11 @@ export const InputPanel: React.FC<InputPanelProps> = ({
   onTargetGateChange,
   onApplyMinterms,
   onApplyExpression,
+  onApplyExample,
   onClear,
   onSetAll
 }) => {
+  const [inputError, setInputError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'indices' | 'expression'>('indices')
   const [termsText, setTermsText] = useState<string>('')
   const [dcText, setDcText] = useState<string>('')
@@ -65,28 +69,40 @@ export const InputPanel: React.FC<InputPanelProps> = ({
 
   const handleTermsChange = (val: string) => {
     setTermsText(val)
-    isSelfTypingRef.current = true
-    const parsedTerms = parseNumberList(val)
-    const currentDc = parseNumberList(dcText).filter((d) => !parsedTerms.includes(d))
-    onApplyMinterms(parsedTerms, currentDc)
+    try {
+      const parsedTerms=parseNumberList(val,(1<<variableCount)-1)
+      const currentDc=parseNumberList(dcText,(1<<variableCount)-1).filter((d)=>!parsedTerms.includes(d))
+      isSelfTypingRef.current=true
+      onApplyMinterms(parsedTerms,currentDc)
+      setInputError(null)
+    } catch(error) { setInputError((error as Error).message) }
   }
-
   const handleDcChange = (val: string) => {
     setDcText(val)
-    isSelfTypingRef.current = true
-    const parsedDc = parseNumberList(val)
-    const currentTerms = parseNumberList(termsText).filter((t) => !parsedDc.includes(t))
-    onApplyMinterms(currentTerms, parsedDc)
+    try {
+      const parsedDc=parseNumberList(val,(1<<variableCount)-1)
+      const currentTerms=parseNumberList(termsText,(1<<variableCount)-1).filter((t)=>!parsedDc.includes(t))
+      isSelfTypingRef.current=true
+      onApplyMinterms(currentTerms,parsedDc)
+      setInputError(null)
+    } catch(error) { setInputError((error as Error).message) }
   }
 
   const handleExpressionInput = (expr: string) => {
     setExpressionText(expr)
     isSelfTypingRef.current = true
-    onApplyExpression(expr)
+    try { onApplyExpression(expr); setInputError(null) }
+    catch(error) { setInputError((error as Error).message) }
   }
 
   return (
     <div className="input-panel-card">
+      {inputError && <p role="alert" className="validation-alert error">{inputError}</p>}
+      <label className="config-item"><span className="config-label">Bài mẫu từ đề thi và ôn tập</span><select className="config-select" aria-label="Bài mẫu Câu 1" defaultValue="" onChange={(event)=>{
+        const example=BOOLEAN_EXAMPLES[Number(event.target.value)]
+        if(!example)return
+        setActiveTab('indices');setTermsText(example.terms.join(', '));setDcText(example.dc.join(', '));setInputError(null);isSelfTypingRef.current=true;onApplyExample(example)
+      }}><option value="" disabled>Chọn bài mẫu</option>{BOOLEAN_EXAMPLES.map((example,index)=><option key={example.label} value={index}>{example.label}</option>)}</select></label>
       <div className="panel-config-row">
         <div className="config-item">
           <label className="config-label">Số biến:</label>
@@ -145,14 +161,14 @@ export const InputPanel: React.FC<InputPanelProps> = ({
           <button
             type="button"
             className={`mode-tab ${activeTab === 'indices' ? 'active' : ''}`}
-            onClick={() => setActiveTab('indices')}
+            onClick={() => {setActiveTab('indices');setInputError(null)}}
           >
             {form === 'SOP' ? 'Nhập chỉ số Minterm (∑)' : 'Nhập chỉ số Maxterm (∏)'}
           </button>
           <button
             type="button"
             className={`mode-tab ${activeTab === 'expression' ? 'active' : ''}`}
-            onClick={() => setActiveTab('expression')}
+            onClick={() => {setActiveTab('expression');setInputError(null)}}
           >
             Nhập biểu thức Boolean
           </button>
@@ -169,6 +185,7 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                   type="text"
                   className="text-input"
                   placeholder="Ví dụ: 1, 2, 4, 5, 9, 10, 12"
+                  aria-label="Chỉ số minterm hoặc maxterm"
                   value={termsText}
                   onChange={(e) => handleTermsChange(e.target.value)}
                 />
@@ -180,6 +197,7 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                   type="text"
                   className="text-input"
                   placeholder="Ví dụ: 0, 13, 14"
+                  aria-label="Chỉ số tùy định"
                   value={dcText}
                   onChange={(e) => handleDcChange(e.target.value)}
                 />
@@ -195,6 +213,7 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                   type="text"
                   className="text-input flex-1"
                   placeholder="Ví dụ: A'B + BC'D hoặc !A*B + B*!C*D"
+                  aria-label="Biểu thức Boolean"
                   value={expressionText}
                   onChange={(e) => handleExpressionInput(e.target.value)}
                 />

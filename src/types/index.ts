@@ -84,7 +84,7 @@ export interface SolverResult {
   targetGateType: TargetGateType
 }
 
-export type ExamProblemType = 'cau_1' | 'cau_2'
+export type ExamProblemType = 'cau_1' | 'cau_2' | 'cau_3'
 
 export type CombinationalSubtype = 'single_rule' | 'code_converter' | 'seven_segment'
 
