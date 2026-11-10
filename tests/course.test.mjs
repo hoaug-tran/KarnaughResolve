@@ -83,6 +83,7 @@ for(const example of BOOLEAN_EXAMPLES){
  const result=solveKMap(4,grid,example.form)
  for(let m=0;m<16;m++)if(grid[m]!=='d')assert.equal(truth(result.groups,example.form,m),grid[m],example.label)
 }
+assert.equal(COUNTER_EXAMPLES.find(p=>p.label.startsWith('Bản chữa trang 9')).sequence,'1,3,4,7,9,12,13')
 for(const preset of COUNTER_EXAMPLES){
  const wave=preset.mode==='waveform'?waveformSequence(preset.z1,preset.z2):null
  const sequence=preset.mode==='sequence'?parseStateSequence(preset.sequence):preset.mode==='waveform'?wave.sequence:moduloSequence(preset.modulus,preset.mode)

@@ -38,7 +38,9 @@ Không cam kết “khớp 100%” giữa những trang nguồn tự mâu thuẫ
 
 - `npm run test:exhaustive`: toàn bộ 65.536 hàm Boolean bốn biến, cả SOP/POS. So sánh giá trị hàm và số nhóm/literal với quy hoạch động trên hợp các cube độc lập, có cho phép chồng nhóm.
 - Các bộ kiểm tra chạy được trên Node 22 (cùng dòng với Docker) và Node 24.
-- Bài mẫu: 17 bộ dữ liệu Câu 1 và 13 bộ dữ liệu Câu 3, gồm cả hai bảng Z1/Z2 của Ôn tập 3_3–3_4.
+- Bài mẫu: 17 bộ dữ liệu Câu 1 và 14 bộ dữ liệu Câu 3, gồm cả hai bảng Z1/Z2 của Ôn tập 3_3–3_4.
 - Kiểm tra nhập số âm, chỉ số vượt số biến, biểu thức sai/không đầy đủ, ký tự LED không hỗ trợ; giữ kết quả hợp lệ khi nhập sai.
 - Bìa xem kết quả không báo có thể sửa ô. Bìa nhập và bảng đầu ra hỗ trợ Enter/Space; hộp hướng dẫn dùng dialog có quản lý focus và Escape của trình duyệt.
 - Docker kiểm thử trước build; npm lockfile dùng thống nhất; kiểm tra sức khỏe và cache tài nguyên tĩnh được định nghĩa trong Dockerfile.
+
+- Bản chữa trang 9 có dãy riêng `1,3,4,7,9,12,13`; đã thêm mẫu độc lập, không ghép với đề 15 trang 1 có dãy khác.

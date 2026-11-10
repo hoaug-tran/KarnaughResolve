@@ -42,6 +42,7 @@ export function booleanExampleGrid(example:BooleanExample):Record<number,CellVal
  return Object.fromEntries(Array.from({length:16},(_,m)=>[m,example.dc.includes(m)?'d':example.terms.includes(m)?example.form==='SOP'?1:0:example.form==='SOP'?0:1]))
 }
 export const COUNTER_EXAMPLES=[
+ {label:'Bản chữa trang 9 · Dãy 1,3,4,7,9,12,13',mode:'sequence',ff:'JK',sequence:'1,3,4,7,9,12,13'},
  {label:'Đề 15 · Dãy 2,4,6,8,10,12,14,15',mode:'sequence',ff:'JK',sequence:'2,4,6,8,10,12,14,15'},
  {label:'Đề 16 / Ôn tập 3_1 · Đếm tiến modul 11',mode:'up',ff:'JK',modulus:11},
  {label:'Đề 17 · Đếm tiến modul 7',mode:'up',ff:'JK',modulus:7},
