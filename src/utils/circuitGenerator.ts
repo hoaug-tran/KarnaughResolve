@@ -104,8 +104,8 @@ export function generateBasicCircuit(
   const stage1GateIds: string[] = []
   const stage1Type = form === 'SOP' ? 'and' : 'or'
 
-  if (groups.length === 0) {
-    const constVal = form === 'SOP' ? '0' : '1'
+  if (groups.length === 0 || groups.some((group) => !group.literals.length)) {
+    const constVal = (form === 'SOP') === (groups.length > 0) ? '1' : '0'
     nodes.push({
       id: 'out-gate',
       type: 'output',
@@ -119,6 +119,11 @@ export function generateBasicCircuit(
 
   groups.forEach((g, idx) => {
     const gateId = `stage1-${idx}`
+    if (g.literals.length === 1) {
+      const literal = g.literals[0]
+      stage1GateIds.push(`${literal.inverted ? '~' : ''}${literal.variable}`)
+      return
+    }
     stage1GateIds.push(gateId)
     const gateY = topOffset + idx * gateSpacing
 
@@ -164,11 +169,13 @@ export function generateBasicCircuit(
       y: topOffset,
       inputs: [stage1GateIds[0]]
     })
+    const sourceX = railXMap[stage1GateIds[0]] ?? stage1StartX + 24
+    if (stage1GateIds[0] in railXMap) taps.push({x:sourceX,y:topOffset})
     wires.push({
       fromNodeId: stage1GateIds[0],
       toNodeId: 'out-gate',
       points: [
-        { x: stage1StartX + 24, y: topOffset },
+        { x: sourceX, y: topOffset },
         { x: stage1StartX + 70, y: topOffset }
       ]
     })
@@ -184,12 +191,14 @@ export function generateBasicCircuit(
 
     stage1GateIds.forEach((gId, idx) => {
       const gY = topOffset + idx * gateSpacing
+      const sourceX = railXMap[gId] ?? stage1StartX + 24
+      if (gId in railXMap) taps.push({x:sourceX,y:gY})
       const pinY = stage2Y - 16 + idx * (32 / (groups.length - 1))
       wires.push({
         fromNodeId: gId,
         toNodeId: 'stage2-collector',
         points: [
-          { x: stage1StartX + 24, y: gY },
+          { x: sourceX, y: gY },
           { x: stage1StartX + 70 + idx * 12, y: gY },
           { x: stage1StartX + 70 + idx * 12, y: pinY },
           { x: stage2X - 24, y: pinY }
@@ -221,1001 +230,89 @@ export function generateBasicCircuit(
 }
 
 export function generateTargetGateCircuit(
-  groups: KMapGroup[],
-  count: VariableCount,
-  form: OptimizationForm,
-  targetGate: TargetGateType,
-  funcName: string = 'Y'
+  groups: KMapGroup[], count: VariableCount, form: OptimizationForm,
+  targetGate: TargetGateType, funcName: string = 'Y'
 ): CircuitDiagram {
-  if (targetGate === 'basic') {
-    return generateBasicCircuit(groups, count, form, funcName)
+  if (targetGate === 'basic') return generateBasicCircuit(groups, count, form, funcName)
+  if (!groups.length) return generateBasicCircuit([], count, form, funcName)
+  if (groups.some((group) => !group.literals.length)) return generateBasicCircuit([], count, form === 'SOP' ? 'POS' : 'SOP', funcName)
+  const diagram = generateBasicCircuit([], count, form, funcName)
+  diagram.nodes = diagram.nodes.filter((node) => node.type !== 'output')
+  const nand = targetGate.startsWith('nand'), binary = targetGate.endsWith('_2')
+  const gateType = nand ? 'nand' : 'nor'
+  for (const node of diagram.nodes) {
+    if (node.type === 'not') { node.type = gateType; node.tiedInput = true; node.inputs = [node.inputs[0],node.inputs[0]]; node.id = node.id.replace('not-','tied-not-') }
   }
-
-  const variables = getVariableNames(count)
-  const railXMap: Record<string, number> = {}
-  const nodes: CircuitNode[] = []
-  const wires: WireConnection[] = []
-  const taps: { x: number; y: number }[] = []
-
-  let currentRailX = 70
-  for (const v of variables) {
-    railXMap[v] = currentRailX
-    railXMap[`~${v}`] = currentRailX + 42
-    currentRailX += 90
+  for (const wire of diagram.wires) {
+    wire.fromNodeId = wire.fromNodeId.replace(/^not-/,'tied-not-')
+    wire.toNodeId = wire.toNodeId.replace(/^not-/,'tied-not-')
   }
-
-  const isNand = targetGate.startsWith('nand')
-  const isTwoInput = targetGate.endsWith('_2')
-  const gateType = isNand ? 'nand' : 'nor'
-
-  const stage1StartX = currentRailX + 90
-  const gateSpacing = isTwoInput ? 100 : 80
-  const topOffset = 180
-  const totalHeight = Math.max(580, topOffset + groups.length * gateSpacing + 80)
-
-  for (const v of variables) {
-    const rx = railXMap[v]
-    const notRx = railXMap[`~${v}`]
-
-    nodes.push({
-      id: `in-${v}`,
-      type: 'input',
-      label: v,
-      x: rx,
-      y: 28,
-      inputs: []
+  const startX = Math.max(...Object.values(diagram.railXMap)) + 110
+  type Signal = { id:string; x:number; y:number; rail?:boolean }
+  let serial = 0
+  const addGate = (inputs:Signal[], y:number):Signal => {
+    const pins = inputs.length === 1 ? [inputs[0],inputs[0]] : inputs
+    const x = Math.max(startX,...pins.filter((pin)=>!pin.rail).map((pin)=>pin.x+110+Math.max(0,pins.length-2)*12))
+    const id = `target-${serial++}`
+    diagram.nodes.push({id,type:gateType,x,y,inputs:pins.map((pin)=>pin.id),tiedInput:inputs.length===1})
+    pins.forEach((pin,index)=>{
+      const pinY = y-12+index*24/(pins.length-1)
+      const laneX = x-50-index*12
+      const points = pin.rail
+        ? x===startX ? [{x:pin.x,y:pinY},{x:x-26,y:pinY}] : [{x:pin.x,y:y+44+index*12},{x:laneX,y:y+44+index*12},{x:laneX,y:pinY},{x:x-26,y:pinY}]
+        : [{x:pin.x,y:pin.y},{x:laneX,y:pin.y},{x:laneX,y:pinY},{x:x-26,y:pinY}]
+      if(pin.rail) diagram.taps.push(points[0])
+      diagram.wires.push({fromNodeId:pin.rail?`rail-${pin.id}`:pin.id,toNodeId:id,toPin:index,points})
     })
-
-    nodes.push({
-      id: `lbl-not-${v}`,
-      type: 'input',
-      label: `${v}̄`,
-      x: notRx,
-      y: 114,
-      inputs: []
-    })
-
-    nodes.push({
-      id: `tied-not-${v}`,
-      type: gateType,
-      x: notRx,
-      y: 78,
-      inputs: [v, v],
-      tiedInput: true
-    })
-
-    taps.push({ x: rx, y: 56 })
-    wires.push({
-      fromNodeId: `in-${v}`,
-      toNodeId: `tied-not-${v}`,
-      points: [
-        { x: rx, y: 56 },
-        { x: notRx, y: 56 },
-        { x: notRx, y: 66 }
-      ]
-    })
-    wires.push({
-      fromNodeId: `tied-not-${v}`,
-      toNodeId: `lbl-not-${v}`,
-      points: [
-        { x: notRx, y: 92 },
-        { x: notRx, y: 103 }
-      ]
-    })
+    return {id,x:x+28,y}
   }
-
-  const stage1Outputs: { id: string; x: number; y: number; label?: string }[] = []
-
-  if (groups.length === 0) {
-    const constVal = form === 'SOP' ? '0' : '1'
-    nodes.push({
-      id: 'out-pin',
-      type: 'output',
-      label: `${funcName} = ${constVal}`,
-      x: stage1StartX,
-      y: topOffset,
-      inputs: []
-    })
-    return { width: Math.max(840, stage1StartX + 180), height: totalHeight, railXMap, nodes, wires, taps }
-  }
-
-  groups.forEach((g, idx) => {
-    const groupY = topOffset + idx * gateSpacing
-    const activeLiterals = form === 'SOP'
-      ? (isNand ? g.literals : g.literals.map((l) => ({ variable: l.variable, inverted: !l.inverted })))
-      : (isNand ? g.literals.map((l) => ({ variable: l.variable, inverted: !l.inverted })) : g.literals)
-
-    const termDisplay = formatTermDisplay(g, form)
-
-    if (!isTwoInput || activeLiterals.length <= 2) {
-      const gId = `target-st1-${idx}`
-      nodes.push({
-        id: gId,
-        type: gateType,
-        label: termDisplay,
-        x: stage1StartX,
-        y: groupY,
-        inputs: activeLiterals.map((l) => (l.inverted ? `~${l.variable}` : l.variable))
-      })
-
-      const inCount = activeLiterals.length
-      activeLiterals.forEach((lit, pinIdx) => {
-        const lineKey = lit.inverted ? `~${lit.variable}` : lit.variable
-        const railX = railXMap[lineKey]
-        const pinY = inCount === 1 ? groupY : groupY - 12 + pinIdx * 24
-
-        taps.push({ x: railX, y: pinY })
-        wires.push({
-          fromNodeId: `rail-${lineKey}`,
-          toNodeId: gId,
-          busLine: lineKey,
-          isDirectBusTap: true,
-          points: [
-            { x: railX, y: pinY },
-            { x: stage1StartX - 24, y: pinY }
-          ]
-        })
-      })
-
-      stage1Outputs.push({ id: gId, x: stage1StartX + 24, y: groupY, label: termDisplay })
-    } else {
-      const g1Id = `target-pair1-${idx}`
-      const invId = `target-inv1-${idx}`
-      const g2Id = `target-pair2-${idx}`
-
-      const l0 = activeLiterals[0]
-      const l1 = activeLiterals[1]
-      const l2 = activeLiterals[2]
-
-      nodes.push({
-        id: g1Id,
-        type: gateType,
-        x: stage1StartX,
-        y: groupY - 20,
-        inputs: [l0.inverted ? `~${l0.variable}` : l0.variable, l1.inverted ? `~${l1.variable}` : l1.variable]
-      })
-
-      const rX0 = railXMap[l0.inverted ? `~${l0.variable}` : l0.variable]
-      const rX1 = railXMap[l1.inverted ? `~${l1.variable}` : l1.variable]
-
-      taps.push({ x: rX0, y: groupY - 28 })
-      wires.push({
-        fromNodeId: 'rail-l0',
-        toNodeId: g1Id,
-        points: [{ x: rX0, y: groupY - 28 }, { x: stage1StartX - 24, y: groupY - 28 }]
-      })
-
-      taps.push({ x: rX1, y: groupY - 12 })
-      wires.push({
-        fromNodeId: 'rail-l1',
-        toNodeId: g1Id,
-        points: [{ x: rX1, y: groupY - 12 }, { x: stage1StartX - 24, y: groupY - 12 }]
-      })
-
-      const invX = stage1StartX + 68
-      nodes.push({
-        id: invId,
-        type: gateType,
-        x: invX,
-        y: groupY - 20,
-        inputs: [g1Id, g1Id],
-        tiedInput: true
-      })
-
-      wires.push({
-        fromNodeId: g1Id,
-        toNodeId: invId,
-        points: [
-          { x: stage1StartX + 24, y: groupY - 20 },
-          { x: invX - 24, y: groupY - 20 }
-        ]
-      })
-
-      const g2X = invX + 75
-      nodes.push({
-        id: g2Id,
-        type: gateType,
-        label: termDisplay,
-        x: g2X,
-        y: groupY,
-        inputs: [invId, l2.inverted ? `~${l2.variable}` : l2.variable]
-      })
-
-      wires.push({
-        fromNodeId: invId,
-        toNodeId: g2Id,
-        points: [
-          { x: invX + 24, y: groupY - 20 },
-          { x: invX + 44, y: groupY - 20 },
-          { x: invX + 44, y: groupY - 8 },
-          { x: g2X - 24, y: groupY - 8 }
-        ]
-      })
-
-      const rX2 = railXMap[l2.inverted ? `~${l2.variable}` : l2.variable]
-      taps.push({ x: rX2, y: groupY + 8 })
-      wires.push({
-        fromNodeId: 'rail-l2',
-        toNodeId: g2Id,
-        points: [
-          { x: rX2, y: groupY + 8 },
-          { x: g2X - 24, y: groupY + 8 }
-        ]
-      })
-
-      stage1Outputs.push({ id: g2Id, x: g2X + 24, y: groupY, label: termDisplay })
+  const combine = (signals:Signal[], inverted:boolean):Signal => {
+    if(signals.length===1) return inverted?addGate(signals,signals[0].y):signals[0]
+    let inputs=signals
+    if(binary&&signals.length>2){
+      const middle=Math.ceil(signals.length/2)
+      inputs=[combine(signals.slice(0,middle),false),combine(signals.slice(middle),false)]
     }
+    const output=addGate(inputs,(Math.min(...signals.map((signal)=>signal.y))+Math.max(...signals.map((signal)=>signal.y)))/2)
+    return inverted?output:addGate([output],output.y)
+  }
+  const crossForm=(form==='POS')===nand
+  const terms=groups.map((group,index)=>{
+    const y=230+index*160
+    const literals=group.literals.map((literal,pin)=>{
+      const inverted=crossForm?!literal.inverted:literal.inverted
+      const id=`${inverted?'~':''}${literal.variable}`
+      return {id,x:diagram.railXMap[id],y:y+(pin-(group.literals.length-1)/2)*42,rail:true}
+    })
+    return combine(literals,true)
   })
-
-  let finalX = stage1StartX + 140
-
-  if (stage1Outputs.length === 1) {
-    const single = stage1Outputs[0]
-    finalX = single.x + 90
-
-    if (isNand && form === 'SOP') {
-      const outInvId = 'single-collector-inv'
-      nodes.push({
-        id: outInvId,
-        type: gateType,
-        x: single.x + 55,
-        y: single.y,
-        inputs: [single.id, single.id],
-        tiedInput: true
-      })
-      wires.push({
-        fromNodeId: single.id,
-        toNodeId: outInvId,
-        points: [{ x: single.x, y: single.y }, { x: single.x + 31, y: single.y }]
-      })
-      nodes.push({
-        id: 'out-pin',
-        type: 'output',
-        label: funcName,
-        x: single.x + 110,
-        y: single.y,
-        inputs: [outInvId]
-      })
-      wires.push({
-        fromNodeId: outInvId,
-        toNodeId: 'out-pin',
-        points: [{ x: single.x + 79, y: single.y }, { x: single.x + 95, y: single.y }]
-      })
-    } else {
-      nodes.push({
-        id: 'out-pin',
-        type: 'output',
-        label: funcName,
-        x: single.x + 70,
-        y: single.y,
-        inputs: [single.id]
-      })
-      wires.push({
-        fromNodeId: single.id,
-        toNodeId: 'out-pin',
-        points: [{ x: single.x, y: single.y }, { x: single.x + 55, y: single.y }]
-      })
-    }
-  } else if (!isTwoInput) {
-    const needsFinalCollectorInverter = (form === 'SOP' && !isNand) || (form === 'POS' && isNand)
-    const collectorX = Math.max(...stage1Outputs.map((s) => s.x)) + 90
-    const collectorY = topOffset + ((groups.length - 1) * gateSpacing) / 2
-
-    nodes.push({
-      id: 'target-collector',
-      type: gateType,
-      label: funcName,
-      x: collectorX,
-      y: collectorY,
-      inputs: stage1Outputs.map((s) => s.id)
-    })
-
-    stage1Outputs.forEach((s, idx) => {
-      const pinY = collectorY - 14 + idx * (28 / (stage1Outputs.length - 1))
-      wires.push({
-        fromNodeId: s.id,
-        toNodeId: 'target-collector',
-        points: [
-          { x: s.x, y: s.y },
-          { x: s.x + 24 + idx * 12, y: s.y },
-          { x: s.x + 24 + idx * 12, y: pinY },
-          { x: collectorX - 24, y: pinY }
-        ]
-      })
-    })
-
-    if (needsFinalCollectorInverter) {
-      const invOutX = collectorX + 68
-      nodes.push({
-        id: 'collector-inv',
-        type: gateType,
-        x: invOutX,
-        y: collectorY,
-        inputs: ['target-collector', 'target-collector'],
-        tiedInput: true
-      })
-      wires.push({
-        fromNodeId: 'target-collector',
-        toNodeId: 'collector-inv',
-        points: [{ x: collectorX + 24, y: collectorY }, { x: invOutX - 24, y: collectorY }]
-      })
-      nodes.push({
-        id: 'out-pin',
-        type: 'output',
-        label: funcName,
-        x: invOutX + 75,
-        y: collectorY,
-        inputs: ['collector-inv']
-      })
-      wires.push({
-        fromNodeId: 'collector-inv',
-        toNodeId: 'out-pin',
-        points: [{ x: invOutX + 24, y: collectorY }, { x: invOutX + 60, y: collectorY }]
-      })
-      finalX = invOutX + 90
-    } else {
-      nodes.push({
-        id: 'out-pin',
-        type: 'output',
-        label: funcName,
-        x: collectorX + 75,
-        y: collectorY,
-        inputs: ['target-collector']
-      })
-      wires.push({
-        fromNodeId: 'target-collector',
-        toNodeId: 'out-pin',
-        points: [
-          { x: collectorX + 24, y: collectorY },
-          { x: collectorX + 60, y: collectorY }
-        ]
-      })
-      finalX = collectorX + 90
-    }
-  } else {
-    const maxX = Math.max(...stage1Outputs.map((s) => s.x))
-    const coll1X = maxX + 80
-    const needsFinalCollectorInverter = (form === 'SOP' && !isNand) || (form === 'POS' && isNand)
-
-    if (stage1Outputs.length === 2) {
-      const collY = (stage1Outputs[0].y + stage1Outputs[1].y) / 2
-      nodes.push({
-        id: 'coll-pair1',
-        type: gateType,
-        x: coll1X,
-        y: collY,
-        inputs: [stage1Outputs[0].id, stage1Outputs[1].id]
-      })
-      wires.push({
-        fromNodeId: stage1Outputs[0].id,
-        toNodeId: 'coll-pair1',
-        points: [
-          { x: stage1Outputs[0].x, y: stage1Outputs[0].y },
-          { x: stage1Outputs[0].x + 24, y: stage1Outputs[0].y },
-          { x: stage1Outputs[0].x + 24, y: collY - 8 },
-          { x: coll1X - 24, y: collY - 8 }
-        ]
-      })
-      wires.push({
-        fromNodeId: stage1Outputs[1].id,
-        toNodeId: 'coll-pair1',
-        points: [
-          { x: stage1Outputs[1].x, y: stage1Outputs[1].y },
-          { x: stage1Outputs[1].x + 24, y: stage1Outputs[1].y },
-          { x: stage1Outputs[1].x + 24, y: collY + 8 },
-          { x: coll1X - 24, y: collY + 8 }
-        ]
-      })
-
-      if (needsFinalCollectorInverter) {
-        const invOutX = coll1X + 68
-        nodes.push({
-          id: 'out-inv',
-          type: gateType,
-          x: invOutX,
-          y: collY,
-          inputs: ['coll-pair1', 'coll-pair1'],
-          tiedInput: true
-        })
-        wires.push({
-          fromNodeId: 'coll-pair1',
-          toNodeId: 'out-inv',
-          points: [{ x: coll1X + 24, y: collY }, { x: invOutX - 24, y: collY }]
-        })
-        nodes.push({
-          id: 'out-pin',
-          type: 'output',
-          label: funcName,
-          x: invOutX + 75,
-          y: collY,
-          inputs: ['out-inv']
-        })
-        wires.push({
-          fromNodeId: 'out-inv',
-          toNodeId: 'out-pin',
-          points: [{ x: invOutX + 24, y: collY }, { x: invOutX + 60, y: collY }]
-        })
-        finalX = invOutX + 90
-      } else {
-        nodes.push({
-          id: 'out-pin',
-          type: 'output',
-          label: funcName,
-          x: coll1X + 75,
-          y: collY,
-          inputs: ['coll-pair1']
-        })
-        wires.push({
-          fromNodeId: 'coll-pair1',
-          toNodeId: 'out-pin',
-          points: [{ x: coll1X + 24, y: collY }, { x: coll1X + 60, y: collY }]
-        })
-        finalX = coll1X + 90
-      }
-    } else if (stage1Outputs.length === 3) {
-      const s0 = stage1Outputs[0]
-      const s1 = stage1Outputs[1]
-      const s2 = stage1Outputs[2]
-
-      const mid01Y = (s0.y + s1.y) / 2
-      nodes.push({
-        id: 'coll-pair01',
-        type: gateType,
-        x: coll1X,
-        y: mid01Y,
-        inputs: [s0.id, s1.id]
-      })
-      wires.push({
-        fromNodeId: s0.id,
-        toNodeId: 'coll-pair01',
-        points: [
-          { x: s0.x, y: s0.y },
-          { x: s0.x + 24, y: s0.y },
-          { x: s0.x + 24, y: mid01Y - 8 },
-          { x: coll1X - 24, y: mid01Y - 8 }
-        ]
-      })
-      wires.push({
-        fromNodeId: s1.id,
-        toNodeId: 'coll-pair01',
-        points: [
-          { x: s1.x, y: s1.y },
-          { x: s1.x + 24, y: s1.y },
-          { x: s1.x + 24, y: mid01Y + 8 },
-          { x: coll1X - 24, y: mid01Y + 8 }
-        ]
-      })
-
-      const inv01X = coll1X + 68
-      nodes.push({
-        id: 'coll-inv01',
-        type: gateType,
-        x: inv01X,
-        y: mid01Y,
-        inputs: ['coll-pair01', 'coll-pair01'],
-        tiedInput: true
-      })
-      wires.push({
-        fromNodeId: 'coll-pair01',
-        toNodeId: 'coll-inv01',
-        points: [{ x: coll1X + 24, y: mid01Y }, { x: inv01X - 24, y: mid01Y }]
-      })
-
-      const coll2X = inv01X + 78
-      const midFinalY = (mid01Y + s2.y) / 2
-      nodes.push({
-        id: 'coll-final',
-        type: gateType,
-        x: coll2X,
-        y: midFinalY,
-        inputs: ['coll-inv01', s2.id]
-      })
-      wires.push({
-        fromNodeId: 'coll-inv01',
-        toNodeId: 'coll-final',
-        points: [
-          { x: inv01X + 24, y: mid01Y },
-          { x: inv01X + 44, y: mid01Y },
-          { x: inv01X + 44, y: midFinalY - 8 },
-          { x: coll2X - 24, y: midFinalY - 8 }
-        ]
-      })
-      wires.push({
-        fromNodeId: s2.id,
-        toNodeId: 'coll-final',
-        points: [
-          { x: s2.x, y: s2.y },
-          { x: s2.x + 36, y: s2.y },
-          { x: s2.x + 36, y: midFinalY + 8 },
-          { x: coll2X - 24, y: midFinalY + 8 }
-        ]
-      })
-
-      if (needsFinalCollectorInverter) {
-        const finalInvX = coll2X + 68
-        nodes.push({
-          id: 'final-inv',
-          type: gateType,
-          x: finalInvX,
-          y: midFinalY,
-          inputs: ['coll-final', 'coll-final'],
-          tiedInput: true
-        })
-        wires.push({
-          fromNodeId: 'coll-final',
-          toNodeId: 'final-inv',
-          points: [{ x: coll2X + 24, y: midFinalY }, { x: finalInvX - 24, y: midFinalY }]
-        })
-        nodes.push({
-          id: 'out-pin',
-          type: 'output',
-          label: funcName,
-          x: finalInvX + 75,
-          y: midFinalY,
-          inputs: ['final-inv']
-        })
-        wires.push({
-          fromNodeId: 'final-inv',
-          toNodeId: 'out-pin',
-          points: [{ x: finalInvX + 24, y: midFinalY }, { x: finalInvX + 60, y: midFinalY }]
-        })
-        finalX = finalInvX + 90
-      } else {
-        nodes.push({
-          id: 'out-pin',
-          type: 'output',
-          label: funcName,
-          x: coll2X + 75,
-          y: midFinalY,
-          inputs: ['coll-final']
-        })
-        wires.push({
-          fromNodeId: 'coll-final',
-          toNodeId: 'out-pin',
-          points: [{ x: coll2X + 24, y: midFinalY }, { x: coll2X + 60, y: midFinalY }]
-        })
-        finalX = coll2X + 90
-      }
-    } else if (stage1Outputs.length >= 4) {
-      const s0 = stage1Outputs[0]
-      const s1 = stage1Outputs[1]
-      const s2 = stage1Outputs[2]
-      const s3 = stage1Outputs[3]
-
-      const mid01Y = (s0.y + s1.y) / 2
-      nodes.push({
-        id: 'coll-pair01',
-        type: gateType,
-        x: coll1X,
-        y: mid01Y,
-        inputs: [s0.id, s1.id]
-      })
-      wires.push({
-        fromNodeId: s0.id,
-        toNodeId: 'coll-pair01',
-        points: [
-          { x: s0.x, y: s0.y },
-          { x: s0.x + 24, y: s0.y },
-          { x: s0.x + 24, y: mid01Y - 8 },
-          { x: coll1X - 24, y: mid01Y - 8 }
-        ]
-      })
-      wires.push({
-        fromNodeId: s1.id,
-        toNodeId: 'coll-pair01',
-        points: [
-          { x: s1.x, y: s1.y },
-          { x: s1.x + 24, y: s1.y },
-          { x: s1.x + 24, y: mid01Y + 8 },
-          { x: coll1X - 24, y: mid01Y + 8 }
-        ]
-      })
-
-      const inv01X = coll1X + 68
-      nodes.push({
-        id: 'coll-inv01',
-        type: gateType,
-        x: inv01X,
-        y: mid01Y,
-        inputs: ['coll-pair01', 'coll-pair01'],
-        tiedInput: true
-      })
-      wires.push({
-        fromNodeId: 'coll-pair01',
-        toNodeId: 'coll-inv01',
-        points: [{ x: coll1X + 24, y: mid01Y }, { x: inv01X - 24, y: mid01Y }]
-      })
-
-      const mid23Y = (s2.y + s3.y) / 2
-      nodes.push({
-        id: 'coll-pair23',
-        type: gateType,
-        x: coll1X,
-        y: mid23Y,
-        inputs: [s2.id, s3.id]
-      })
-      wires.push({
-        fromNodeId: s2.id,
-        toNodeId: 'coll-pair23',
-        points: [
-          { x: s2.x, y: s2.y },
-          { x: s2.x + 24, y: s2.y },
-          { x: s2.x + 24, y: mid23Y - 8 },
-          { x: coll1X - 24, y: mid23Y - 8 }
-        ]
-      })
-      wires.push({
-        fromNodeId: s3.id,
-        toNodeId: 'coll-pair23',
-        points: [
-          { x: s3.x, y: s3.y },
-          { x: s3.x + 24, y: s3.y },
-          { x: s3.x + 24, y: mid23Y + 8 },
-          { x: coll1X - 24, y: mid23Y + 8 }
-        ]
-      })
-
-      const inv23X = coll1X + 68
-      nodes.push({
-        id: 'coll-inv23',
-        type: gateType,
-        x: inv23X,
-        y: mid23Y,
-        inputs: ['coll-pair23', 'coll-pair23'],
-        tiedInput: true
-      })
-      wires.push({
-        fromNodeId: 'coll-pair23',
-        toNodeId: 'coll-inv23',
-        points: [{ x: coll1X + 24, y: mid23Y }, { x: inv23X - 24, y: mid23Y }]
-      })
-
-      const coll2X = inv01X + 78
-      const midFinalY = (mid01Y + mid23Y) / 2
-      nodes.push({
-        id: 'coll-final',
-        type: gateType,
-        x: coll2X,
-        y: midFinalY,
-        inputs: ['coll-inv01', 'coll-inv23']
-      })
-      wires.push({
-        fromNodeId: 'coll-inv01',
-        toNodeId: 'coll-final',
-        points: [
-          { x: inv01X + 24, y: mid01Y },
-          { x: inv01X + 44, y: mid01Y },
-          { x: inv01X + 44, y: midFinalY - 8 },
-          { x: coll2X - 24, y: midFinalY - 8 }
-        ]
-      })
-      wires.push({
-        fromNodeId: 'coll-inv23',
-        toNodeId: 'coll-final',
-        points: [
-          { x: inv23X + 24, y: mid23Y },
-          { x: inv23X + 44, y: mid23Y },
-          { x: inv23X + 44, y: midFinalY + 8 },
-          { x: coll2X - 24, y: midFinalY + 8 }
-        ]
-      })
-
-      if (needsFinalCollectorInverter) {
-        const finalInvX = coll2X + 68
-        nodes.push({
-          id: 'final-inv',
-          type: gateType,
-          x: finalInvX,
-          y: midFinalY,
-          inputs: ['coll-final', 'coll-final'],
-          tiedInput: true
-        })
-        wires.push({
-          fromNodeId: 'coll-final',
-          toNodeId: 'final-inv',
-          points: [{ x: coll2X + 24, y: midFinalY }, { x: finalInvX - 24, y: midFinalY }]
-        })
-        nodes.push({
-          id: 'out-pin',
-          type: 'output',
-          label: funcName,
-          x: finalInvX + 75,
-          y: midFinalY,
-          inputs: ['final-inv']
-        })
-        wires.push({
-          fromNodeId: 'final-inv',
-          toNodeId: 'out-pin',
-          points: [{ x: finalInvX + 24, y: midFinalY }, { x: finalInvX + 60, y: midFinalY }]
-        })
-        finalX = finalInvX + 90
-      } else {
-        nodes.push({
-          id: 'out-pin',
-          type: 'output',
-          label: funcName,
-          x: coll2X + 75,
-          y: midFinalY,
-          inputs: ['coll-final']
-        })
-        wires.push({
-          fromNodeId: 'coll-final',
-          toNodeId: 'out-pin',
-          points: [{ x: coll2X + 24, y: midFinalY }, { x: coll2X + 60, y: midFinalY }]
-        })
-        finalX = coll2X + 90
-      }
-    } else if (stage1Outputs.length > 0) {
-      const s0 = stage1Outputs[0]
-      nodes.push({
-        id: 'out-pin',
-        type: 'output',
-        label: funcName,
-        x: s0.x + 80,
-        y: s0.y,
-        inputs: [s0.id]
-      })
-      wires.push({
-        fromNodeId: s0.id,
-        toNodeId: 'out-pin',
-        points: [{ x: s0.x + 24, y: s0.y }, { x: s0.x + 70, y: s0.y }]
-      })
-      finalX = s0.x + 100
-    }
-  }
-
-  const width = Math.max(900, finalX + 160)
-  return { width, height: totalHeight, railXMap, nodes, wires, taps }
+  const output=combine(terms,!crossForm)
+  const x=output.x+75
+  diagram.nodes.push({id:'out-pin',type:'output',label:funcName,x,y:output.y,inputs:[output.id]})
+  diagram.wires.push({fromNodeId:output.id,toNodeId:'out-pin',points:[{x:output.x,y:output.y},{x:x-15,y:output.y}]})
+  diagram.width=Math.max(840,x+60)
+  diagram.height=Math.max(580,230+(groups.length-1)*160+120)
+  return diagram
 }
 
 export function generateMultiOutputBasicCircuit(
-  outputs: { name: string; groups: KMapGroup[]; form?: OptimizationForm }[],
-  count: VariableCount,
-  form: OptimizationForm = 'SOP'
+  outputs: { name:string; groups:KMapGroup[]; form?:OptimizationForm }[],
+  count:VariableCount, form:OptimizationForm='SOP'
 ): CircuitDiagram {
-  const variables = getVariableNames(count)
-  const railXMap: Record<string, number> = {}
-  const nodes: CircuitNode[] = []
-  const wires: WireConnection[] = []
-  const taps: { x: number; y: number }[] = []
-
-  let currentRailX = 70
-  for (const v of variables) {
-    railXMap[v] = currentRailX
-    railXMap[`~${v}`] = currentRailX + 42
-    currentRailX += 90
-  }
-
-  const stage1StartX = currentRailX + 90
-  const stage2StartX = stage1StartX + 180
-  const outPinX = stage2StartX + 80
-  const gateSpacing = 72
-  const outputSpacing = 36
-
-  for (const v of variables) {
-    const rx = railXMap[v]
-    const notRx = railXMap[`~${v}`]
-
-    nodes.push({
-      id: `in-${v}`,
-      type: 'input',
-      label: v,
-      x: rx,
-      y: 28,
-      inputs: []
-    })
-
-    nodes.push({
-      id: `lbl-not-${v}`,
-      type: 'input',
-      label: `${v}̄`,
-      x: notRx,
-      y: 114,
-      inputs: []
-    })
-
-    nodes.push({
-      id: `not-${v}`,
-      type: 'not',
-      x: notRx,
-      y: 78,
-      inputs: [v]
-    })
-
-    taps.push({ x: rx, y: 56 })
-    wires.push({
-      fromNodeId: `in-${v}`,
-      toNodeId: `not-${v}`,
-      points: [
-        { x: rx, y: 56 },
-        { x: notRx, y: 56 },
-        { x: notRx, y: 66 }
-      ]
-    })
-    wires.push({
-      fromNodeId: `not-${v}`,
-      toNodeId: `lbl-not-${v}`,
-      points: [
-        { x: notRx, y: 92 },
-        { x: notRx, y: 103 }
-      ]
-    })
-  }
-
-  let currentY = 170
-
-  outputs.forEach((out, outIdx) => {
-    const outGroups = out.groups
-    const outForm = out.form || form
-    const stage1Type = outForm === 'SOP' ? 'and' : 'or'
-    const stage2Type = outForm === 'SOP' ? 'or' : 'and'
-
-    if (outGroups.length === 0) {
-      const pinId = `out-${out.name}-${outIdx}`
-      nodes.push({
-        id: pinId,
-        type: 'output',
-        label: `${out.name}=0`,
-        x: stage1StartX + 80,
-        y: currentY,
-        inputs: []
-      })
-      currentY += gateSpacing + outputSpacing
-      return
-    }
-
-    if (outGroups.length === 1 && outGroups[0].literals.length === 0) {
-      const pinId = `out-${out.name}-${outIdx}`
-      nodes.push({
-        id: pinId,
-        type: 'output',
-        label: `${out.name}=1`,
-        x: stage1StartX + 80,
-        y: currentY,
-        inputs: []
-      })
-      currentY += gateSpacing + outputSpacing
-      return
-    }
-
-    const outputGateIds: string[] = []
-    const startYForOutput = currentY
-
-    outGroups.forEach((g, gIdx) => {
-      const gateId = `mo-gate-${outIdx}-${gIdx}`
-      outputGateIds.push(gateId)
-      const gateY = currentY
-
-      if (g.literals.length === 1) {
-        const lit = g.literals[0]
-        const lineKey = lit.inverted ? `~${lit.variable}` : lit.variable
-        const railX = railXMap[lineKey]
-        taps.push({ x: railX, y: gateY })
-
-        nodes.push({
-          id: gateId,
-          type: stage1Type,
-          label: formatTermDisplay(g, outForm),
-          x: stage1StartX,
-          y: gateY,
-          inputs: [lineKey]
-        })
-
-        wires.push({
-          fromNodeId: `rail-${lineKey}`,
-          toNodeId: gateId,
-          busLine: lineKey,
-          isDirectBusTap: true,
-          points: [
-            { x: railX, y: gateY },
-            { x: stage1StartX - 24, y: gateY }
-          ]
-        })
-      } else {
-        nodes.push({
-          id: gateId,
-          type: stage1Type,
-          label: formatTermDisplay(g, outForm),
-          x: stage1StartX,
-          y: gateY,
-          inputs: g.literals.map((l) => (l.inverted ? `~${l.variable}` : l.variable))
-        })
-
-        const inputCount = g.literals.length
-        g.literals.forEach((lit, pinIdx) => {
-          const lineKey = lit.inverted ? `~${lit.variable}` : lit.variable
-          const railX = railXMap[lineKey]
-          const pinY = inputCount === 1 ? gateY : gateY - 14 + pinIdx * (28 / Math.max(1, inputCount - 1))
-
-          taps.push({ x: railX, y: pinY })
-          wires.push({
-            fromNodeId: `rail-${lineKey}`,
-            toNodeId: gateId,
-            busLine: lineKey,
-            isDirectBusTap: true,
-            points: [
-              { x: railX, y: pinY },
-              { x: stage1StartX - 24, y: pinY }
-            ]
-          })
-        })
-      }
-
-      currentY += gateSpacing
-    })
-
-    const midY = startYForOutput + ((outGroups.length - 1) * gateSpacing) / 2
-
-    if (outGroups.length === 1) {
-      const pinId = `out-${out.name}-${outIdx}`
-      nodes.push({
-        id: pinId,
-        type: 'output',
-        label: out.name,
-        x: stage1StartX + 90,
-        y: midY,
-        inputs: [outputGateIds[0]]
-      })
-      wires.push({
-        fromNodeId: outputGateIds[0],
-        toNodeId: pinId,
-        points: [
-          { x: stage1StartX + 24, y: midY },
-          { x: stage1StartX + 75, y: midY }
-        ]
-      })
-    } else {
-      const collId = `coll-${out.name}-${outIdx}`
-      const pinId = `out-${out.name}-${outIdx}`
-
-      nodes.push({
-        id: collId,
-        type: stage2Type,
-        label: out.name,
-        x: stage2StartX,
-        y: midY,
-        inputs: outputGateIds
-      })
-
-      outputGateIds.forEach((gId, gIdx) => {
-        const gY = startYForOutput + gIdx * gateSpacing
-        const pinY = outGroups.length === 1 ? midY : midY - 16 + gIdx * (32 / (outGroups.length - 1))
-        wires.push({
-          fromNodeId: gId,
-          toNodeId: collId,
-          points: [
-            { x: stage1StartX + 24, y: gY },
-            { x: stage1StartX + 60 + (gIdx % 3) * 10, y: gY },
-            { x: stage1StartX + 60 + (gIdx % 3) * 10, y: pinY },
-            { x: stage2StartX - 24, y: pinY }
-          ]
-        })
-      })
-
-      nodes.push({
-        id: pinId,
-        type: 'output',
-        label: out.name,
-        x: outPinX,
-        y: midY,
-        inputs: [collId]
-      })
-
-      wires.push({
-        fromNodeId: collId,
-        toNodeId: pinId,
-        points: [
-          { x: stage2StartX + 24, y: midY },
-          { x: outPinX - 15, y: midY }
-        ]
-      })
-    }
-
-    currentY += outputSpacing
+  const combined=generateBasicCircuit([],count,form)
+  combined.nodes=combined.nodes.filter((node)=>node.type!=='output')
+  let offset=0
+  outputs.forEach((output,index)=>{
+    const diagram=generateBasicCircuit(output.groups,count,output.form??form,output.name)
+    const gates=diagram.nodes.filter((node)=>!node.id.startsWith('in-')&&!node.id.startsWith('not-')&&!node.id.startsWith('lbl-not-'))
+    const ids=new Set(gates.map((node)=>node.id))
+    const rename=(id:string)=>ids.has(id)?`output-${index}-${id}`:id
+    combined.nodes.push(...gates.map((node)=>({...node,id:rename(node.id),y:node.y+offset,inputs:node.inputs.map(rename)})))
+    combined.wires.push(...diagram.wires.filter((wire)=>ids.has(wire.toNodeId)).map((wire)=>({...wire,fromNodeId:rename(wire.fromNodeId),toNodeId:rename(wire.toNodeId),points:wire.points.map((point)=>({...point,y:point.y+offset}))})))
+    combined.taps.push(...diagram.taps.filter((tap)=>tap.y>126).map((tap)=>({...tap,y:tap.y+offset})))
+    combined.width=Math.max(combined.width,diagram.width)
+    offset+=Math.max(...gates.map((node)=>node.y))-180+140
   })
-
-  const totalHeight = Math.max(580, currentY + 40)
-  const width = Math.max(900, outPinX + 100)
-
-  return { width, height: totalHeight, railXMap, nodes, wires, taps }
+  combined.height=Math.max(580,offset+100)
+  return combined
 }

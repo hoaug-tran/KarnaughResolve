@@ -80,68 +80,50 @@ export function mintermToCell(count: VariableCount, minterm: number): { rowIdx: 
   return { rowIdx, colIdx }
 }
 
-export function parseNumberList(input: string): number[] {
-  if (!input || !input.trim()) return []
-  const matches = input.match(/\d+/g)
-  if (!matches) return []
-  return Array.from(new Set(matches.map(Number))).sort((a, b) => a - b)
+export function parseNumberList(input: string, max: number = 15): number[] {
+  if (input.length > 256) throw new Error('Danh sách tối đa 256 ký tự.')
+  const tokens=input.trim().split(/[\s,;]+/).filter(Boolean)
+  if(tokens.some((token)=>!/^\d+$/.test(token)||Number(token)>max)) throw new Error(`Chỉ số phải là số nguyên từ 0 đến ${max}.`)
+  return [...new Set(tokens.map(Number))].sort((a,b)=>a-b)
 }
 
 export function parseExpression(expr: string, count: VariableCount): { minterms: number[]; dontCares: number[] } {
-  const clean = expr.replace(/\s+/g, '').toUpperCase()
-  if (!clean) return { minterms: [], dontCares: [] }
-
-  const variables = getVariableNames(count)
-  const totalCells = 1 << count
-  const minterms: number[] = []
-
-  const terms = clean.split('+').filter(Boolean)
-
-  for (let m = 0; m < totalCells; m++) {
-    const bitMap: Record<string, number> = {}
-    for (let i = 0; i < count; i++) {
-      const bit = (m >> (count - 1 - i)) & 1
-      bitMap[variables[i]] = bit
-    }
-
-    let cellMatches = false
-    for (const term of terms) {
-      let termSatisfied = true
-      let i = 0
-      while (i < term.length) {
-        let isNeg = false
-        if (term[i] === '!' || term[i] === '~') {
-          isNeg = true
-          i++
-        }
-        const ch = term[i]
-        i++
-        if (i < term.length && (term[i] === "'" || term[i] === '’')) {
-          isNeg = !isNeg
-          i++
-        }
-
-        if (variables.includes(ch)) {
-          const expectedVal = isNeg ? 0 : 1
-          if (bitMap[ch] !== expectedVal) {
-            termSatisfied = false
-            break
-          }
-        }
-      }
-
-      if (termSatisfied) {
-        cellMatches = true
-        break
-      }
-    }
-
-    if (cellMatches) {
-      minterms.push(m)
-    }
+  if (expr.length > 256) throw new Error('Biểu thức tối đa 256 ký tự.')
+  const text=expr.replace(/\s+/g,'').replace(/’|′/g,"'").toUpperCase()
+  if (!text) return {minterms:[],dontCares:[]}
+  const variables=getVariableNames(count)
+  type Expression=(state:number)=>boolean
+  let index=0
+  const invalid=()=>new Error(`Biểu thức không hợp lệ tại vị trí ${index+1}. Dùng ${variables.join(', ')}, 0/1, +, dấu nhân, dấu đảo và ngoặc.`)
+  function atom():Expression {
+    let inverted=false
+    while(text[index]==='!'||text[index]==='~'){inverted=!inverted;index++}
+    const token=text[index++]
+    let value:Expression
+    if(token==='('){value=sum();if(text[index++]!==')')throw invalid()}
+    else if(token==='0'||token==='1')value=()=>token==='1'
+    else if(variables.includes(token)){const bit=count-1-variables.indexOf(token);value=(state)=>Boolean(state&(1<<bit))}
+    else throw invalid()
+    while(text[index]==="'"){inverted=!inverted;index++}
+    return inverted?(state)=>!value(state):value
   }
-
-  return { minterms, dontCares: [] }
+  function product():Expression {
+    let value=atom()
+    while(index<text.length&&text[index]!=='+'&&text[index]!==')'){
+      if(text[index]==='.'||text[index]==='*'||text[index]==='·'||text[index]==='&')index++
+      const left=value,right=atom()
+      value=(state)=>left(state)&&right(state)
+    }
+    return value
+  }
+  function sum():Expression {
+    let value=product()
+    while(text[index]==='+'){index++;const left=value,right=product();value=(state)=>left(state)||right(state)}
+    return value
+  }
+  const evaluate=sum()
+  if(index!==text.length)throw invalid()
+  return {minterms:Array.from({length:1<<count},(_,state)=>state).filter(evaluate),dontCares:[]}
 }
 
 interface RectGroup {
@@ -307,9 +289,9 @@ function selectCover(
       if (!bestCover || currentCover.length < bestCover.length) {
         bestCover = [...currentCover]
       } else if (currentCover.length === bestCover.length) {
-        const curSize = currentCover.reduce((sum, g) => sum + g.cells.length, 0)
-        const bestSize = bestCover.reduce((sum, g) => sum + g.cells.length, 0)
-        if (curSize > bestSize) {
+        const curSize = currentCover.reduce((sum, g) => sum + Math.log2(g.cells.length), 0)
+        const bestSize = bestCover.reduce((sum, g) => sum + Math.log2(g.cells.length), 0)
+        if (curSize > bestSize || (curSize === bestSize && currentCover.filter((g) => g.cells.length === 4).length > bestCover.filter((g) => g.cells.length === 4).length)) {
           bestCover = [...currentCover]
         }
       }
@@ -410,6 +392,8 @@ export function solveKMap(
   grid: Record<number, CellValue>,
   form: OptimizationForm
 ): { groups: KMapGroup[]; simplifiedLatex: string; simplifiedPlain: string } {
+  if (![2,3,4].includes(count) || !['SOP','POS'].includes(form)) throw new Error('Bìa Karnaugh cần 2–4 biến và dạng SOP hoặc POS.')
+  for(let m=0;m<1<<count;m++) if(![0,1,'d'].includes(grid[m])) throw new Error(`Ô ${m} phải có giá trị 0, 1 hoặc d.`)
   const totalCells = 1 << count
   const targetVal: CellValue = form === 'SOP' ? 1 : 0
 
